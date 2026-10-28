@@ -10,7 +10,8 @@
  *  - respostas de erro sem vazar detalhe interno
  */
 
-import { ingerirLote, quantosFaltam } from "./ingest.js";
+import { ingerirLote, quantosFaltam, atualizarUm } from "./ingest.js";
+import { estado as estadoLimite, liberar, limparAntigos } from "./limites.js";
 
 const json = (data, status = 200, extra = {}) =>
   new Response(JSON.stringify(data, null, 2), {
@@ -48,7 +49,17 @@ function conferirAdmin(request, env) {
   return diff === 0 ? "ok" : "nao_confere";
 }
 
-async function rotaBarras(url, env) {
+/**
+ * Serve a serie do NOSSO banco e, se o dado estiver velho, dispara uma
+ * atualizacao em segundo plano.
+ *
+ * A ordem importa: o usuario recebe o banco imediatamente e nunca espera o
+ * provedor. A atualizacao acontece depois da resposta ter sido enviada, e
+ * aparece para ele na proxima vez que abrir. Isso mantem a tela rapida e faz o
+ * consumo de requisicoes acompanhar o uso real, em vez de varrer 96 ativos de
+ * hora em hora para ninguem olhar.
+ */
+async function rotaBarras(url, env, ctx) {
   const ticker = (url.searchParams.get("ticker") || "").toUpperCase().trim();
   if (!/^[A-Z0-9^=.-]{1,20}$/.test(ticker)) return erro("ticker invalido");
 
@@ -70,11 +81,37 @@ async function rotaBarras(url, env) {
     .bind(ticker)
     .first();
 
+  // Idade do dado: se o ultimo candle do banco e de antes de hoje, ou se o
+  // ativo nao e atualizado ha mais de 20 minutos, vale buscar.
+  const controle = await env.DB.prepare(
+    `SELECT last_ok_at,
+            (julianday('now') - julianday(COALESCE(last_ok_at,'1970-01-01'))) * 1440 AS min_desde
+       FROM assets WHERE ticker = ?`
+  )
+    .bind(ticker)
+    .first();
+
+  const minutosDesde = Math.round(controle?.min_desde ?? 999999);
+  const velho = minutosDesde > 20;
+
+  if (velho && ativo && ctx) {
+    // waitUntil: roda DEPOIS da resposta ir embora. O usuario nao espera.
+    ctx.waitUntil(
+      atualizarUm(env.DB, env, ticker, ativo.market, "demanda").catch((e) =>
+        console.warn("atualizacao sob demanda falhou:", ticker, e?.message || e)
+      )
+    );
+  }
+
   return json({
     ticker,
     ativo: ativo || null,
     total: results.length,
     bars: (results || []).reverse(),
+    frescor: {
+      minutos_desde_ultima_carga: controle?.last_ok_at ? minutosDesde : null,
+      atualizando_em_segundo_plano: !!(velho && ativo && ctx),
+    },
   });
 }
 
@@ -126,7 +163,7 @@ export default {
         });
       }
 
-      if (rota === "/api/bars") return rotaBarras(url, env);
+      if (rota === "/api/bars") return rotaBarras(url, env, ctx);
 
       if (rota === "/api/status") return rotaStatus(env);
 
@@ -163,6 +200,58 @@ export default {
         return json(resumo);
       }
 
+      // Medidor de consumo do provedor. Protegido: expoe o estado do motor.
+      if (rota === "/api/admin/metrics") {
+        const check = conferirAdmin(request, env);
+        if (check !== "ok") return erro("nao autorizado", check === "sem_segredo_no_servidor" ? 503 : 401);
+
+        const [limite, totais] = await Promise.all([
+          estadoLimite(env.DB, env),
+          env.DB.prepare(
+            `SELECT (SELECT COUNT(*) FROM assets WHERE active = 1)                               AS ativos,
+                    (SELECT COUNT(*) FROM assets WHERE active = 1 AND last_ok_at IS NOT NULL)    AS carregados,
+                    (SELECT COUNT(*) FROM daily_bars)                                            AS barras,
+                    (SELECT COUNT(*) FROM assets WHERE last_error IS NOT NULL)                   AS com_erro`
+          ).first(),
+        ]);
+
+        const { results: porHora } = await env.DB.prepare(
+          `SELECT strftime('%Y-%m-%d %H:00', at) AS hora, COUNT(*) AS n,
+                  SUM(CASE WHEN ok = 0 THEN 1 ELSE 0 END) AS falhas
+             FROM provider_calls
+            WHERE at >= datetime('now','-24 hours')
+            GROUP BY hora ORDER BY hora DESC LIMIT 24`
+        ).all();
+
+        const { results: cargas } = await env.DB.prepare(
+          `SELECT id, kind, provider, started_at, finished_at, ok_count, fail_count, bars_written
+             FROM ingest_runs ORDER BY id DESC LIMIT 8`
+        ).all();
+
+        const { results: erros } = await env.DB.prepare(
+          `SELECT ticker, last_error, last_error_at FROM assets
+            WHERE last_error IS NOT NULL ORDER BY last_error_at DESC LIMIT 15`
+        ).all();
+
+        return json({
+          agora: new Date().toISOString(),
+          limite,
+          totais,
+          faltam_carregar: await quantosFaltam(env.DB),
+          consumo_por_hora: porHora || [],
+          ultimas_cargas: cargas || [],
+          ativos_com_erro: erros || [],
+        });
+      }
+
+      // Tira o sistema do recuo automatico antes da hora, se eu decidir que ja da.
+      if (rota === "/api/admin/liberar" && request.method === "POST") {
+        const check = conferirAdmin(request, env);
+        if (check !== "ok") return erro("nao autorizado", 401);
+        await liberar(env.DB);
+        return json({ ok: true, mensagem: "recuo liberado" });
+      }
+
       if (rota.startsWith("/api/")) return erro("rota nao encontrada", 404);
 
       // Tudo que nao e API vai para os arquivos estaticos.
@@ -178,8 +267,15 @@ export default {
     ctx.waitUntil(
       (async () => {
         try {
-          const resumo = await ingerirLote(env.DB, env, { kind: "cron" });
+          // Varredura unica do dia, apos o after-market fechar. Busca 3 meses
+          // para pegar correcoes e tapar buracos se o sistema ficou fora do ar.
+          const resumo = await ingerirLote(env.DB, env, {
+            kind: "cron",
+            rangeAtualizacao: "3mo",
+            frescorHoras: 6,
+          });
           console.log("carga agendada:", JSON.stringify(resumo));
+          await limparAntigos(env.DB, 30);
         } catch (e) {
           // Sem este try, uma excecao aqui some sem deixar rastro, e a carga
           // falha em silencio. Ja perdemos tempo com isso uma vez.

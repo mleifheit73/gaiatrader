@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gaia Trader · Motor</title>
+<style>
+  :root{
+    --bg:#0e1412; --panel:#131b18; --line:#24302b; --fg:#e8eceb; --muted:#8d9a95;
+    --brand:#2ed4ac; --ok:#3fcf86; --atencao:#e8b339; --perigo:#ff6b5a;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 var(--sans)}
+  .wrap{max-width:1060px;margin:0 auto;padding:26px 18px 60px}
+  header{display:flex;flex-wrap:wrap;gap:12px;align-items:baseline;justify-content:space-between;
+    padding-bottom:13px;border-bottom:1px solid var(--line);margin-bottom:20px}
+  h1{font:700 21px var(--sans);margin:0;letter-spacing:-.02em}
+  h1 span{color:var(--brand)}
+  h2{font:600 13px var(--sans);text-transform:uppercase;letter-spacing:.07em;color:var(--muted);
+    margin:26px 0 11px}
+  .painel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px}
+
+  /* velocimetro */
+  .medidor{display:grid;grid-template-columns:minmax(230px,300px) 1fr;gap:22px;align-items:center}
+  @media(max-width:640px){.medidor{grid-template-columns:1fr}}
+  .gauge{width:100%;max-width:300px;margin:0 auto;display:block}
+  .gauge-num{font:700 38px var(--mono);text-anchor:middle}
+  .gauge-un{font:500 12px var(--sans);fill:var(--muted);text-anchor:middle}
+  .leitura b{display:block;font:500 11px var(--sans);color:var(--muted);
+    text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px}
+  .leitura p{margin:0 0 14px;font:500 17px var(--mono)}
+  .selo{display:inline-block;font:700 11px var(--sans);letter-spacing:.06em;text-transform:uppercase;
+    padding:4px 11px;border-radius:99px;border:1px solid currentColor}
+  .ok{color:var(--ok)} .atencao{color:var(--atencao)} .perigo{color:var(--perigo)} .pausado{color:var(--perigo)}
+
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:11px 13px}
+  .card b{display:block;font:500 11px var(--sans);color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+  .card span{font:500 19px var(--mono)}
+
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th{text-align:left;font:600 11px var(--sans);text-transform:uppercase;letter-spacing:.05em;
+    color:var(--muted);padding:7px 10px;border-bottom:1px solid var(--line)}
+  td{padding:7px 10px;border-bottom:1px solid var(--line);font-family:var(--mono);font-size:12.5px}
+  tr:last-child td{border-bottom:0}
+
+  .barras{display:flex;align-items:flex-end;gap:3px;height:70px;padding:0 2px}
+  .barras i{flex:1;background:var(--brand);border-radius:2px 2px 0 0;min-height:2px;opacity:.75}
+  .barras i.falhou{background:var(--perigo)}
+  .eixo{display:flex;justify-content:space-between;font:400 10.5px var(--mono);color:var(--muted);margin-top:5px}
+
+  .aviso{padding:12px 14px;border-radius:9px;border-left:3px solid var(--perigo);
+    background:color-mix(in srgb,var(--perigo) 10%,transparent);font-size:13.5px;margin-bottom:16px}
+  .btn{font:500 13px var(--sans);background:var(--panel);color:var(--fg);border:1px solid var(--line);
+    border-radius:7px;padding:8px 13px;cursor:pointer}
+  .btn:hover{border-color:var(--brand)}
+  input{font:500 14px var(--mono);background:#0b100e;color:var(--fg);border:1px solid var(--line);
+    border-radius:7px;padding:9px 12px;width:100%;max-width:420px}
+  .entrada{padding:40px 0;max-width:460px}
+  .entrada p{color:var(--muted);font-size:13.5px}
+  .rodape{margin-top:26px;color:var(--muted);font-size:12.5px;line-height:1.7}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>Gaia <span>Trader</span> · motor</h1>
+    <span id="atualizado" style="color:var(--muted);font-size:12.5px"></span>
+  </header>
+
+  <div id="conteudo"></div>
+
+</div>
+
+<script>
+const K = "gaiatrader_admin_token";
+const $ = (id) => document.getElementById(id);
+const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
+const hora = (iso) => iso ? new Date(iso).toLocaleString("pt-BR", { dateStyle:"short", timeStyle:"short" }) : "–";
+
+function pedirSenha(mensagem) {
+  $("conteudo").innerHTML = `
+    <div class="entrada">
+      <h2 style="margin-top:0">Acesso ao motor</h2>
+      ${mensagem ? `<div class="aviso">${esc(mensagem)}</div>` : ""}
+      <p>Informe o segredo de administração. Ele fica guardado apenas neste navegador.</p>
+      <input id="tk" type="password" placeholder="ADMIN_TOKEN" autocomplete="off">
+      <p><button class="btn" id="entrar">Entrar</button></p>
+    </div>`;
+  const entrar = () => {
+    const v = $("tk").value.trim();
+    if (!v) return;
+    try { localStorage.setItem(K, v); } catch (e) {}
+    carregar();
+  };
+  $("entrar").onclick = entrar;
+  $("tk").onkeydown = (e) => { if (e.key === "Enter") entrar(); };
+  $("tk").focus();
+}
+
+/**
+ * Velocímetro: arco de 240 graus, do canto inferior esquerdo ao inferior direito.
+ * A faixa colorida mostra onde começa a atenção e onde começa o perigo, para a
+ * leitura ser imediata sem precisar interpretar o número.
+ */
+function velocimetro(pct, nivel, faixas) {
+  const R = 86, CX = 110, CY = 110, ABERTURA = 240;
+  const ang = (p) => (-210 + (ABERTURA * p) / 100) * (Math.PI / 180);
+  const ponto = (p, raio) => [CX + raio * Math.cos(ang(p)), CY + raio * Math.sin(ang(p))];
+  const arco = (de, ate, raio, cor, largura) => {
+    const [x1, y1] = ponto(de, raio), [x2, y2] = ponto(ate, raio);
+    const grande = ((ate - de) / 100) * ABERTURA > 180 ? 1 : 0;
+    return `<path d="M ${x1.toFixed(1)} ${y1.toFixed(1)} A ${raio} ${raio} 0 ${grande} 1 ${x2.toFixed(1)} ${y2.toFixed(1)}"
+             fill="none" stroke="${cor}" stroke-width="${largura}" stroke-linecap="round"/>`;
+  };
+  const cor = { ok:"var(--ok)", atencao:"var(--atencao)", perigo:"var(--perigo)", pausado:"var(--perigo)" }[nivel] || "var(--ok)";
+  const [px, py] = ponto(Math.max(0.6, pct), R - 26);
+
+  return `<svg class="gauge" viewBox="0 0 220 180" role="img" aria-label="Consumo de ${pct}% do teto">
+    ${arco(0, faixas.atencao, R, "color-mix(in srgb, var(--ok) 28%, transparent)", 13)}
+    ${arco(faixas.atencao, faixas.perigo, R, "color-mix(in srgb, var(--atencao) 28%, transparent)", 13)}
+    ${arco(faixas.perigo, 100, R, "color-mix(in srgb, var(--perigo) 28%, transparent)", 13)}
+    ${pct > 0.5 ? arco(0, pct, R, cor, 13) : ""}
+    <line x1="${CX}" y1="${CY}" x2="${px.toFixed(1)}" y2="${py.toFixed(1)}"
+          stroke="${cor}" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="${CX}" cy="${CY}" r="6" fill="${cor}"/>
+    <text class="gauge-num" x="${CX}" y="152" fill="${cor}">${pct}%</text>
+    <text class="gauge-un" x="${CX}" y="169">do teto que definimos por hora</text>
+  </svg>`;
+}
+
+function render(d) {
+  const L = d.limite;
+  const rotulo = { ok:"Tranquilo", atencao:"Atenção", perigo:"Perigo", pausado:"Em recuo" }[L.nivel];
+
+  const maxBarra = Math.max(1, ...(d.consumo_por_hora || []).map((h) => h.n));
+  const barras = (d.consumo_por_hora || []).slice().reverse();
+
+  $("atualizado").textContent = "lido às " + hora(d.agora);
+
+  $("conteudo").innerHTML = `
+    ${L.pausado ? `<div class="aviso">
+        <b>Ingestão em recuo automático até ${esc(hora(L.pausa_ate))}.</b><br>
+        Motivo: ${esc(L.pausa_motivo || "não registrado")}.
+        <p style="margin:10px 0 0"><button class="btn" id="liberar">Liberar agora</button></p>
+      </div>` : ""}
+
+    <section class="painel medidor">
+      ${velocimetro(L.percentual, L.nivel, L.faixas)}
+      <div class="leitura">
+        <span class="selo ${L.nivel}">${rotulo}</span>
+        <div style="height:14px"></div>
+        <b>Consultas na última hora</b>
+        <p>${L.usadas_1h} de ${L.teto_hora}</p>
+        <b>Ainda cabem nesta hora</b>
+        <p>${L.restantes_na_hora}</p>
+        <b>Consultas nas últimas 24 horas</b>
+        <p>${L.usadas_24h}</p>
+      </div>
+    </section>
+
+    <h2>Saúde do provedor</h2>
+    <div class="cards">
+      <div class="card"><b>Bloqueios 429 em 24h</b><span class="${L.bloqueios_24h ? "perigo" : ""}">${L.bloqueios_24h}</span></div>
+      <div class="card"><b>Falhas em 24h</b><span class="${L.falhas_24h ? "atencao" : ""}">${L.falhas_24h}</span></div>
+      <div class="card"><b>Ativos com erro</b><span class="${d.totais.com_erro ? "atencao" : ""}">${d.totais.com_erro}</span></div>
+      <div class="card"><b>Teto por hora</b><span>${L.teto_hora}</span></div>
+    </div>
+
+    <h2>Base de dados</h2>
+    <div class="cards">
+      <div class="card"><b>Ativos acompanhados</b><span>${d.totais.ativos}</span></div>
+      <div class="card"><b>Já carregados</b><span>${d.totais.carregados}</span></div>
+      <div class="card"><b>Faltam carregar</b><span class="${d.faltam_carregar ? "atencao" : ""}">${d.faltam_carregar}</span></div>
+      <div class="card"><b>Candles no banco</b><span>${Number(d.totais.barras).toLocaleString("pt-BR")}</span></div>
+    </div>
+
+    <h2>Consumo por hora, últimas 24 horas</h2>
+    <section class="painel">
+      ${barras.length ? `
+        <div class="barras">
+          ${barras.map((h) => `<i class="${h.falhas ? "falhou" : ""}" style="height:${Math.round((h.n / maxBarra) * 100)}%"
+               title="${esc(h.hora)}: ${h.n} consultas, ${h.falhas} falhas"></i>`).join("")}
+        </div>
+        <div class="eixo"><span>${esc((barras[0] || {}).hora || "")}</span><span>agora</span></div>`
+        : `<p style="color:var(--muted);margin:0;font-size:13.5px">Nenhuma consulta nas últimas 24 horas.</p>`}
+    </section>
+
+    <h2>Últimas cargas</h2>
+    <section class="painel" style="padding:0;overflow-x:auto">
+      <table>
+        <thead><tr><th>#</th><th>Origem</th><th>Início</th><th>Ok</th><th>Falhas</th><th>Candles</th></tr></thead>
+        <tbody>${(d.ultimas_cargas || []).map((c) => `
+          <tr><td>${c.id}</td><td>${esc(c.kind)}</td><td>${esc(hora(c.started_at))}</td>
+              <td>${c.ok_count}</td><td class="${c.fail_count ? "perigo" : ""}">${c.fail_count}</td>
+              <td>${Number(c.bars_written).toLocaleString("pt-BR")}</td></tr>`).join("") ||
+          `<tr><td colspan="6" style="color:var(--muted)">Nenhuma carga ainda.</td></tr>`}
+        </tbody>
+      </table>
+    </section>
+
+    ${(d.ativos_com_erro || []).length ? `
+      <h2>Ativos com erro</h2>
+      <section class="painel" style="padding:0;overflow-x:auto">
+        <table>
+          <thead><tr><th>Ativo</th><th>Erro</th><th>Quando</th></tr></thead>
+          <tbody>${d.ativos_com_erro.map((a) => `
+            <tr><td>${esc(a.ticker)}</td><td style="white-space:normal">${esc(a.last_error)}</td>
+                <td>${esc(hora(a.last_error_at))}</td></tr>`).join("")}</tbody>
+        </table>
+      </section>` : ""}
+
+    <p class="rodape">
+      O teto de ${L.teto_hora} consultas por hora é imposto por nós, não pelo provedor.
+      O número mais citado para o Yahoo é 360 por hora, mas não é oficial e não há garantia nenhuma.
+      Trabalhamos com uma fração disso de propósito, porque o endereço de saída da Cloudflare é
+      compartilhado e podemos ser bloqueados por excesso de terceiros.
+      Ao primeiro 429 o sistema para de consultar sozinho por 3 horas.
+    </p>`;
+
+  const b = $("liberar");
+  if (b) b.onclick = async () => {
+    b.disabled = true;
+    await fetch("/api/admin/liberar", { method:"POST", headers:{ "x-admin-token": token() } });
+    carregar();
+  };
+}
+
+const token = () => { try { return localStorage.getItem(K) || ""; } catch (e) { return ""; } };
+
+async function carregar() {
+  const t = token();
+  if (!t) return pedirSenha();
+  try {
+    const r = await fetch("/api/admin/metrics", { headers: { "x-admin-token": t } });
+    if (r.status === 401) { try { localStorage.removeItem(K); } catch (e) {} return pedirSenha("Segredo incorreto."); }
+    if (r.status === 503) return pedirSenha("O segredo ADMIN_TOKEN não está configurado no servidor.");
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    render(await r.json());
+  } catch (e) {
+    $("conteudo").innerHTML = `<div class="aviso">Não consegui ler as métricas: ${esc(e?.message || e)}</div>`;
+  }
+}
+
+carregar();
+setInterval(carregar, 60000);
+</script>
+</body>
+</html>

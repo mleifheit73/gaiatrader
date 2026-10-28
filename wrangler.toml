@@ -13,19 +13,27 @@ binding = "DB"
 database_name = "gaiatrader-db"
 database_id = "d0143976-772a-4ca7-92fa-c3fb227effb6"
 
-# Janela de carga: de 5 em 5 minutos, das 21h as 21h55 UTC, que e das 18h as
-# 18h55 de Brasilia. O Brasil nao tem horario de verao desde 2019, entao o
-# deslocamento e fixo em UTC-3 o ano inteiro.
+# UMA varredura por dia, e so.
 #
-# Sao 12 execucoes, e cada uma processa um lote dos ativos mais desatualizados.
-# Com 96 ativos e lote de 20, bastam 5 execucoes para cobrir o mercado inteiro;
-# as demais nao fazem nada, porque nao sobra ativo desatualizado para buscar.
-# A janela com folga existe para absorver falha de rede sem perder o dia.
+# Das 21h30 as 22h25 UTC, que e das 18h30 as 19h25 de Brasilia. O Brasil nao tem
+# horario de verao desde 2019, entao o deslocamento e fixo em UTC-3.
 #
-# Todos os dias, e nao so em dia util, porque cripto negocia no fim de semana.
-# Nesses dias a B3 e buscada a toa, mas a escrita e idempotente e o custo e nulo.
+# Por que 18h30 e nao logo apos as 17h: a B3 fecha o pregao regular as 17h, mas
+# o after-market vai ate as 18h. Varrer antes disso pegaria um fechamento que
+# ainda pode mudar. As 18h30 o candle do dia e definitivo.
+#
+# Sao 12 execucoes de 5 em 5 minutos, cada uma com um lote dos ativos mais
+# desatualizados. Bastam 5 para cobrir os 96; as demais nao fazem nada porque
+# nao sobra ativo desatualizado. A folga absorve falha de rede sem perder o dia.
+#
+# Fora dessa janela o sistema NAO varre nada. A atualizacao durante o dia e sob
+# demanda: so busca o ativo que alguem esta olhando, e so se o dado estiver
+# velho. Isso faz o consumo acompanhar o uso real em vez do tamanho do catalogo,
+# que e a unica forma de ficar bem longe do limite do provedor.
+#
+# Todos os dias, nao so em dia util, porque cripto negocia no fim de semana.
 [triggers]
-crons = ["*/5 21 * * *"]
+crons = ["30,35,40,45,50,55 21 * * *", "0,5,10,15,20,25 22 * * *"]
 
 [vars]
 # Provedor de cotacoes em uso. Trocar aqui quando houver licenca comercial.

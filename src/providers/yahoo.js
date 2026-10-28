@@ -53,7 +53,12 @@ export const yahoo = {
     });
 
     if (!res.ok) {
-      throw new Error(`yahoo: HTTP ${res.status} em ${ticker}`);
+      // O codigo vai anexado ao erro porque a camada de protecao usa o 429 para
+      // decidir entrar em recuo automatico. Sem isso, um bloqueio vira apenas
+      // mais uma falha generica e o sistema continua batendo na porta fechada.
+      const err = new Error(`yahoo: HTTP ${res.status} em ${ticker}`);
+      err.status = res.status;
+      throw err;
     }
 
     const json = await res.json();

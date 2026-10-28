@@ -21,6 +21,7 @@
  */
 
 import { getProvider } from "./providers/index.js";
+import { consultar, podeConsultar } from "./limites.js";
 
 const LOTE_PADRAO = 20;
 const FRESCOR_HORAS = 6;
@@ -129,7 +130,29 @@ export async function quantosFaltam(db, opts = {}) {
 export async function ingerirLote(db, env, opts = {}) {
   const provider = getProvider(opts.provider, env);
   const kind = opts.kind || "manual";
-  const alvos = await selecionarLote(db, opts);
+
+  // Confere o orcamento ANTES de escolher o lote. Se estamos em recuo ou no
+  // teto da hora, a carga nem comeca, e isso fica registrado como tal.
+  const permissao = await podeConsultar(db, env);
+  if (!permissao.pode) {
+    return {
+      runId: null,
+      provider: provider.name,
+      no_lote: 0,
+      ok: 0,
+      falhas: 0,
+      barras: 0,
+      faltam: await quantosFaltam(db, opts),
+      carregados: [],
+      problemas: [],
+      bloqueado: permissao.motivo,
+      orcamento: permissao.estado,
+    };
+  }
+
+  // Nunca pedir mais ativos do que cabe no que resta do orcamento da hora.
+  const teto = Math.min(opts.lote || LOTE_PADRAO, permissao.estado.restantes_na_hora);
+  const alvos = await selecionarLote(db, { ...opts, lote: Math.max(0, teto) });
 
   const run = await db
     .prepare(
@@ -150,7 +173,7 @@ export async function ingerirLote(db, env, opts = {}) {
       : opts.rangeAtualizacao || RANGE_ATUALIZACAO;
 
     try {
-      const info = await provider.daily(alvo.ticker, alvo.market, { range });
+      const info = await consultar(db, env, provider, alvo.ticker, alvo.market, { range }, kind);
       if (!info.bars.length) throw new Error("serie vazia");
 
       await db
@@ -170,6 +193,12 @@ export async function ingerirLote(db, env, opts = {}) {
       ok++;
       carregados.push({ ticker: alvo.ticker, range, barras: n });
     } catch (e) {
+      // Estouro de orcamento ou recuo nao e falha do ativo: e decisao nossa de
+      // nao gastar. Interrompe a carga sem marcar o ativo como problematico.
+      if (e?.orcamento) {
+        problemas.push({ ticker: alvo.ticker, erro: "interrompido: " + e.message });
+        break;
+      }
       falhas++;
       const msg = String(e?.message || e).slice(0, 300);
       problemas.push({ ticker: alvo.ticker, erro: msg });
@@ -215,4 +244,41 @@ export async function ingerirLote(db, env, opts = {}) {
     carregados,
     problemas,
   };
+}
+
+/**
+ * Atualiza UM ativo, para a atualizacao sob demanda.
+ *
+ * Chamada quando alguem abre um ativo cujo dado esta velho. Roda depois que a
+ * resposta ja foi enviada, entao nunca atrasa a tela. Passa pela mesma protecao
+ * de orcamento e recuo que a carga agendada: se estamos no teto ou em recuo,
+ * simplesmente nao acontece, e o usuario continua vendo o que havia no banco.
+ */
+export async function atualizarUm(db, env, ticker, market, kind = "demanda") {
+  const provider = getProvider(null, env);
+
+  const r = await db
+    .prepare(`SELECT COUNT(*) AS n FROM daily_bars WHERE ticker = ?`)
+    .bind(ticker)
+    .first();
+
+  const range = r?.n ? "5d" : RANGE_INICIAL;
+
+  const info = await consultar(db, env, provider, ticker, market, { range }, kind);
+  if (!info.bars.length) throw new Error("serie vazia");
+
+  await db
+    .prepare(
+      `UPDATE assets
+          SET name = COALESCE(?, name), currency = ?,
+              last_ok_at = datetime('now'),
+              last_error = NULL, last_error_at = NULL,
+              updated_at = datetime('now')
+        WHERE ticker = ?`
+    )
+    .bind(info.name, info.currency, ticker)
+    .run();
+
+  const n = await gravarBarras(db, ticker, info.bars, provider.name);
+  return { ticker, range, barras: n };
 }
