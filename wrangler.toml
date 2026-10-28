@@ -13,12 +13,19 @@ binding = "DB"
 database_name = "gaiatrader-db"
 database_id = "d0143976-772a-4ca7-92fa-c3fb227effb6"
 
-# Carga diaria apos o fechamento da B3.
-# 21h30 UTC = 18h30 de Brasilia. O Brasil nao tem horario de verao desde 2019,
-# entao o deslocamento e fixo em UTC-3 o ano inteiro e nao ha ajuste sazonal.
-# De segunda a sexta, porque nao ha pregao no fim de semana.
+# Janela de carga: de 5 em 5 minutos, das 21h as 21h55 UTC, que e das 18h as
+# 18h55 de Brasilia. O Brasil nao tem horario de verao desde 2019, entao o
+# deslocamento e fixo em UTC-3 o ano inteiro.
+#
+# Sao 12 execucoes, e cada uma processa um lote dos ativos mais desatualizados.
+# Com 96 ativos e lote de 20, bastam 5 execucoes para cobrir o mercado inteiro;
+# as demais nao fazem nada, porque nao sobra ativo desatualizado para buscar.
+# A janela com folga existe para absorver falha de rede sem perder o dia.
+#
+# Todos os dias, e nao so em dia util, porque cripto negocia no fim de semana.
+# Nesses dias a B3 e buscada a toa, mas a escrita e idempotente e o custo e nulo.
 [triggers]
-crons = ["30 21 * * 1-5"]
+crons = ["*/5 21 * * *"]
 
 [vars]
 # Provedor de cotacoes em uso. Trocar aqui quando houver licenca comercial.

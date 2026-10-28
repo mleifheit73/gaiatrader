@@ -10,7 +10,7 @@
  *  - respostas de erro sem vazar detalhe interno
  */
 
-import { ingerir, alvosDaCarga } from "./ingest.js";
+import { ingerirLote, quantosFaltam } from "./ingest.js";
 
 const json = (data, status = 200, extra = {}) =>
   new Response(JSON.stringify(data, null, 2), {
@@ -85,11 +85,23 @@ async function rotaStatus(env) {
   ).all();
 
   const totais = await env.DB.prepare(
-    `SELECT (SELECT COUNT(*) FROM assets)     AS ativos,
-            (SELECT COUNT(*) FROM daily_bars) AS barras`
+    `SELECT (SELECT COUNT(*) FROM assets WHERE active = 1)                      AS ativos,
+            (SELECT COUNT(*) FROM assets WHERE active = 1 AND last_ok_at IS NOT NULL) AS ativos_carregados,
+            (SELECT COUNT(*) FROM daily_bars)                                   AS barras,
+            (SELECT COUNT(DISTINCT ticker) FROM daily_bars)                      AS ativos_com_candles`
   ).first();
 
-  return json({ totais, ultimas_cargas: runs || [] });
+  const { results: comErro } = await env.DB.prepare(
+    `SELECT ticker, last_error, last_error_at FROM assets
+      WHERE last_error IS NOT NULL ORDER BY last_error_at DESC LIMIT 20`
+  ).all();
+
+  return json({
+    totais,
+    faltam_carregar: await quantosFaltam(env.DB),
+    ativos_com_erro: comErro || [],
+    ultimas_cargas: runs || [],
+  });
 }
 
 export default {
@@ -135,8 +147,19 @@ export default {
         if (check !== "ok") {
           return erro("O valor de x-admin-token nao confere com o segredo do servidor.", 401);
         }
-        const alvos = await alvosDaCarga(env.DB);
-        const resumo = await ingerir(env.DB, env, alvos, { kind: "manual", range: "2y" });
+        // Parametros ajustaveis pela chamada, para eu conseguir medir o tamanho
+        // de lote que cabe no limite do plano antes de fixar um valor.
+        const n = (k, padrao) => {
+          const v = parseInt(url.searchParams.get(k) || "", 10);
+          return Number.isFinite(v) ? v : padrao;
+        };
+        const resumo = await ingerirLote(env.DB, env, {
+          kind: "manual",
+          lote: n("lote", 20),
+          frescorHoras: n("frescor", 6),
+          rangeInicial: url.searchParams.get("inicial") || undefined,
+          rangeAtualizacao: url.searchParams.get("atualizacao") || undefined,
+        });
         return json(resumo);
       }
 
@@ -154,9 +177,14 @@ export default {
   async scheduled(event, env, ctx) {
     ctx.waitUntil(
       (async () => {
-        const alvos = await alvosDaCarga(env.DB);
-        const resumo = await ingerir(env.DB, env, alvos, { kind: "cron", range: "2y" });
-        console.log("carga agendada:", JSON.stringify(resumo));
+        try {
+          const resumo = await ingerirLote(env.DB, env, { kind: "cron" });
+          console.log("carga agendada:", JSON.stringify(resumo));
+        } catch (e) {
+          // Sem este try, uma excecao aqui some sem deixar rastro, e a carga
+          // falha em silencio. Ja perdemos tempo com isso uma vez.
+          console.error("carga agendada falhou:", e?.stack || e);
+        }
       })()
     );
   },

@@ -1,27 +1,42 @@
 /**
- * Ingestao de cotacoes para o nosso banco.
+ * Ingestao de cotacoes para o nosso banco, em lotes.
  *
- * Regras de projeto:
- *  - Idempotente: rodar duas vezes a mesma carga atualiza, nunca duplica.
- *    Garantido pela chave primaria (ticker, d) e pelo ON CONFLICT.
- *  - Observavel: toda execucao registra inicio, fim, quantos ativos deram certo,
- *    quantos falharam e o motivo. Carga que falha em silencio e o pior defeito
- *    possivel num sistema de dados.
- *  - Tolerante: a falha de um ativo nao derruba a carga dos outros.
+ * POR QUE EM LOTES
+ * O plano gratuito da Cloudflare limita as chamadas externas por execucao.
+ * Buscar os 96 ativos de uma vez estoura o limite. Em vez de pagar para
+ * levantar o teto, cada execucao processa um lote e o sistema se completa em
+ * varias execucoes.
+ *
+ * COMO A RETOMADA FUNCIONA, SEM GUARDAR ESTADO
+ * Cada ativo registra quando foi carregado com sucesso pela ultima vez. O lote
+ * e sempre formado pelos mais desatualizados. Um ativo que falha nao tem esse
+ * campo atualizado, entao aparece de novo no lote seguinte, naturalmente.
+ * Nao existe cursor, nao existe fila, nao existe logica de retentativa: a
+ * propria ordenacao resolve. Menos codigo, menos defeito possivel.
+ *
+ * CUSTO DE BANDA
+ * A primeira carga de um ativo traz 10 anos. As seguintes trazem poucos meses,
+ * porque so interessa o que mudou. Isso faz a carga diaria ser muito mais leve
+ * que a inicial, sem nenhuma logica especial.
  */
 
 import { getProvider } from "./providers/index.js";
+
+const LOTE_PADRAO = 20;
+const FRESCOR_HORAS = 6;
+const RANGE_INICIAL = "10y";
+const RANGE_ATUALIZACAO = "3mo";
 
 /** Grava as barras de um ativo. Devolve quantas linhas foram escritas. */
 async function gravarBarras(db, ticker, bars, src) {
   if (!bars.length) return 0;
 
   const agora = new Date().toISOString().replace("T", " ").slice(0, 19);
-  const LOTE = 50; // D1 limita o tamanho do lote; 50 e folgado e rapido
+  const LOTE_SQL = 50;
   let escritas = 0;
 
-  for (let i = 0; i < bars.length; i += LOTE) {
-    const fatia = bars.slice(i, i + LOTE);
+  for (let i = 0; i < bars.length; i += LOTE_SQL) {
+    const fatia = bars.slice(i, i + LOTE_SQL);
     const stmts = fatia.map((b) =>
       db
         .prepare(
@@ -41,65 +56,109 @@ async function gravarBarras(db, ticker, bars, src) {
   return escritas;
 }
 
-/** Atualiza o cadastro do ativo com o que o provedor informou. */
-async function atualizarAtivo(db, ticker, market, info) {
-  await db
+/**
+ * Escolhe o proximo lote: os ativos ativos mais desatualizados primeiro,
+ * ignorando os que ja foram carregados ha pouco tempo.
+ */
+export async function selecionarLote(db, opts = {}) {
+  const lote = Math.max(1, Math.min(opts.lote || LOTE_PADRAO, 60));
+  const horas = opts.frescorHoras ?? FRESCOR_HORAS;
+
+  const { results } = await db
     .prepare(
-      `INSERT INTO assets (ticker, market, name, currency, updated_at)
-       VALUES (?, ?, ?, ?, datetime('now'))
-       ON CONFLICT(ticker) DO UPDATE SET
-         name = COALESCE(excluded.name, assets.name),
-         currency = excluded.currency,
-         updated_at = excluded.updated_at`
+      `SELECT a.ticker, a.market,
+              (SELECT COUNT(*) FROM daily_bars b WHERE b.ticker = a.ticker) AS n_barras
+         FROM assets a
+        WHERE a.active = 1
+          AND (a.last_ok_at IS NULL OR a.last_ok_at < datetime('now', ?))
+        ORDER BY (a.last_ok_at IS NOT NULL), a.last_ok_at ASC, a.ticker ASC
+        LIMIT ?`
     )
-    .bind(ticker, market, info.name, info.currency)
-    .run();
+    .bind(`-${horas} hours`, lote)
+    .all();
+
+  return results || [];
+}
+
+/** Quantos ativos ainda estao desatualizados, para saber se falta rodar mais. */
+export async function quantosFaltam(db, opts = {}) {
+  const horas = opts.frescorHoras ?? FRESCOR_HORAS;
+  const r = await db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM assets
+        WHERE active = 1 AND (last_ok_at IS NULL OR last_ok_at < datetime('now', ?))`
+    )
+    .bind(`-${horas} hours`)
+    .first();
+  return r?.n ?? 0;
 }
 
 /**
- * Executa uma carga.
+ * Executa uma carga de um lote.
  * @param {D1Database} db
- * @param {Array<{ticker: string, market: string}>} alvos
- * @param {{kind?: string, range?: string}} opts
+ * @param {object} env
+ * @param {{lote?: number, kind?: string, frescorHoras?: number,
+ *          rangeInicial?: string, rangeAtualizacao?: string, provider?: string}} opts
  */
-export async function ingerir(db, env, alvos, opts = {}) {
+export async function ingerirLote(db, env, opts = {}) {
   const provider = getProvider(opts.provider, env);
   const kind = opts.kind || "manual";
-  const inicio = new Date().toISOString();
+  const alvos = await selecionarLote(db, opts);
 
   const run = await db
     .prepare(
       `INSERT INTO ingest_runs (kind, provider, started_at) VALUES (?, ?, ?) RETURNING id`
     )
-    .bind(kind, provider.name, inicio)
+    .bind(kind, provider.name, new Date().toISOString())
     .first();
 
   const runId = run?.id;
   let ok = 0, falhas = 0, barras = 0;
   const problemas = [];
+  const carregados = [];
 
   for (const alvo of alvos) {
+    const primeiraVez = !alvo.n_barras;
+    const range = primeiraVez
+      ? opts.rangeInicial || RANGE_INICIAL
+      : opts.rangeAtualizacao || RANGE_ATUALIZACAO;
+
     try {
-      const info = await provider.daily(alvo.ticker, alvo.market, { range: opts.range });
+      const info = await provider.daily(alvo.ticker, alvo.market, { range });
       if (!info.bars.length) throw new Error("serie vazia");
 
-      await atualizarAtivo(db, alvo.ticker, alvo.market, info);
-      barras += await gravarBarras(db, alvo.ticker, info.bars, provider.name);
+      await db
+        .prepare(
+          `UPDATE assets
+              SET name = COALESCE(?, name), currency = ?,
+                  last_ok_at = datetime('now'),
+                  last_error = NULL, last_error_at = NULL,
+                  updated_at = datetime('now')
+            WHERE ticker = ?`
+        )
+        .bind(info.name, info.currency, alvo.ticker)
+        .run();
+
+      const n = await gravarBarras(db, alvo.ticker, info.bars, provider.name);
+      barras += n;
       ok++;
+      carregados.push({ ticker: alvo.ticker, range, barras: n });
     } catch (e) {
       falhas++;
-      problemas.push({ ticker: alvo.ticker, erro: String(e?.message || e) });
+      const msg = String(e?.message || e).slice(0, 300);
+      problemas.push({ ticker: alvo.ticker, erro: msg });
+      // Nao atualiza last_ok_at de proposito: o ativo volta ao proximo lote.
+      await db
+        .prepare(
+          `UPDATE assets SET last_error = ?, last_error_at = datetime('now') WHERE ticker = ?`
+        )
+        .bind(msg, alvo.ticker)
+        .run()
+        .catch(() => {});
     }
   }
 
-  const resumo = {
-    runId,
-    provider: provider.name,
-    ok,
-    falhas,
-    barras,
-    problemas,
-  };
+  const faltam = await quantosFaltam(db, opts);
 
   if (runId) {
     await db
@@ -119,18 +178,15 @@ export async function ingerir(db, env, alvos, opts = {}) {
       .run();
   }
 
-  return resumo;
-}
-
-/** Os ativos que a carga agendada deve buscar. Na Fase 0, apenas um. */
-export async function alvosDaCarga(db) {
-  const { results } = await db
-    .prepare(`SELECT ticker, market FROM assets WHERE active = 1 ORDER BY ticker`)
-    .all();
-
-  // Semente: enquanto a tabela estiver vazia, a Fase 0 trabalha com um unico ativo.
-  if (!results || !results.length) {
-    return [{ ticker: "PETR4", market: "b3" }];
-  }
-  return results;
+  return {
+    runId,
+    provider: provider.name,
+    no_lote: alvos.length,
+    ok,
+    falhas,
+    barras,
+    faltam,
+    carregados,
+    problemas,
+  };
 }
