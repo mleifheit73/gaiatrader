@@ -121,6 +121,20 @@ curl -X POST https://<endereco>/api/admin/ingest -H "x-admin-token: <segredo>"
 | 4 | Diário de trades, pareceres e estudos salvos |
 | 5 | Cobrança e controle de assinatura |
 
+## Limites da plataforma que o projeto respeita
+
+Números da documentação da Cloudflare, não do SQLite. A diferença entre os dois
+já custou uma carga falha: o SQLite permite 999 parâmetros por comando, o D1
+permite 100.
+
+| Limite | Valor | Onde nos afeta |
+|---|---|---|
+| Parâmetros por comando (D1) | 100 | Gravação de candles: 9 linhas por comando |
+| Comandos por lote (D1) | sem limite documentado | Um lote conta como uma operação só |
+| Tamanho do banco (plano gratuito) | 500 MB | 96 ativos com 10 anos dão cerca de 36 MB |
+| Chamadas externas por execução (plano gratuito) | 50 | Ingestão em lotes de até 20 ativos |
+| Consultas ao provedor (teto nosso) | 120 por hora | Um terço do limite rumorado do Yahoo |
+
 ## Pendências conhecidas
 
 - Licença de dados para uso comercial: obrigatória antes da primeira cobrança

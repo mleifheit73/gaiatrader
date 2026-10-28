@@ -41,9 +41,21 @@ const RANGE_ATUALIZACAO = "3mo";
  * e 999; com 10 colunas por linha, cabem 90 linhas com folga. Dez comandos por
  * viagem dao 900 candles por ida ao banco, contra 50 antes.
  */
+/*
+ * NUMEROS VINDOS DA DOCUMENTACAO DO D1, NAO DO SQLITE.
+ *
+ * Esta distincao custou uma carga falha. O SQLite permite 999 parametros por
+ * comando, e eu dimensionei por esse numero. O D1 permite 100, e so 100. O
+ * resultado foi "too many SQL variables" em todos os ativos do lote.
+ *
+ * Em compensacao, a documentacao esclarece algo melhor do que eu supunha: um
+ * lote inteiro conta como UMA operacao, e o exemplo oficial usa 2.000 comandos
+ * num lote so. Entao o caminho e o inverso do que eu tinha feito: poucas linhas
+ * por comando, muitos comandos por viagem.
+ */
 const COLUNAS = 10;
-const LINHAS_POR_COMANDO = 90;   // 90 x 10 colunas = 900 parametros, sob o limite de 999
-const COMANDOS_POR_VIAGEM = 10;  // 900 candles por ida ao banco
+const LINHAS_POR_COMANDO = 9;     // 9 x 10 colunas = 90 parametros, sob o limite de 100
+const COMANDOS_POR_VIAGEM = 150;  // 1.350 candles por ida ao banco
 
 const SUFIXO_CONFLITO = `ON CONFLICT(ticker, d) DO UPDATE SET
    o = excluded.o, h = excluded.h, l = excluded.l, c = excluded.c,
