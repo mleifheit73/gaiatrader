@@ -1,0 +1,32 @@
+name = "gaiatrader-api"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+
+# Arquivos estaticos (a pagina do grafico) servidos pelo proprio Worker.
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+# Banco de dados. O identificador aponta para o banco criado na conta gaiatrader.
+[[d1_databases]]
+binding = "DB"
+database_name = "gaiatrader-db"
+database_id = "d0143976-772a-4ca7-92fa-c3fb227effb6"
+
+# Carga diaria apos o fechamento da B3.
+# 21h30 UTC = 18h30 de Brasilia. O Brasil nao tem horario de verao desde 2019,
+# entao o deslocamento e fixo em UTC-3 o ano inteiro e nao ha ajuste sazonal.
+# De segunda a sexta, porque nao ha pregao no fim de semana.
+[triggers]
+crons = ["30 21 * * 1-5"]
+
+[vars]
+# Provedor de cotacoes em uso. Trocar aqui quando houver licenca comercial.
+DATA_PROVIDER = "yahoo"
+# Endereco de suporte mostrado ao usuario. Fica como configuracao para que a
+# troca para suporte@gaiatrader.com.br custe uma linha.
+SUPORTE_EMAIL = "info@gaiabelle.com"
+
+# Segredos (NAO ficam neste arquivo). Defina com:
+#   npx wrangler secret put ADMIN_TOKEN
+#   npx wrangler secret put ANTHROPIC_API_KEY   (a partir da Fase 3)

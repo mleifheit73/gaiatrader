@@ -1,0 +1,16 @@
+{
+  "name": "gaiatrader",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Gaia Trader: analise tecnica da B3 e cripto",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:migrate": "wrangler d1 migrations apply gaiatrader-db --remote",
+    "db:migrate:local": "wrangler d1 migrations apply gaiatrader-db --local"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}

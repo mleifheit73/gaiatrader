@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gaia Trader</title>
+<style>
+  :root{
+    --bg:#0e1412; --panel:#131b18; --line:#24302b; --fg:#e8eceb; --muted:#8d9a95;
+    --brand:#2ed4ac; --up:#3fcf86; --down:#ff6b5a;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 var(--sans)}
+  .wrap{max-width:1100px;margin:0 auto;padding:28px 18px 60px}
+  header{display:flex;flex-wrap:wrap;gap:12px;align-items:baseline;justify-content:space-between;
+    padding-bottom:14px;border-bottom:1px solid var(--line)}
+  h1{font:700 22px var(--sans);margin:0;letter-spacing:-.02em}
+  h1 span{color:var(--brand)}
+  .selo{font:600 11px var(--sans);letter-spacing:.06em;text-transform:uppercase;
+    color:var(--brand);border:1px solid var(--brand);border-radius:99px;padding:3px 10px}
+  .sub{color:var(--muted);font-size:13.5px;margin:10px 0 22px;max-width:70ch}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:18px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:11px 13px}
+  .card b{display:block;font:500 11px var(--sans);color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+  .card span{font:500 17px var(--mono)}
+  .up{color:var(--up)} .down{color:var(--down)}
+  .painel{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .ph{display:flex;flex-wrap:wrap;gap:10px;align-items:baseline;justify-content:space-between;
+    padding:11px 14px;border-bottom:1px solid var(--line)}
+  .ph strong{font-size:15px}
+  .ph em{font-style:normal;color:var(--muted);font-size:12.5px}
+  #chart{height:min(58vh,480px);min-height:300px}
+  .vazio{padding:50px 20px;text-align:center;color:var(--muted);font-size:14px}
+  footer{margin-top:22px;color:var(--muted);font-size:12.5px;line-height:1.7}
+  code{font-family:var(--mono);background:#1a2420;padding:1.5px 6px;border-radius:5px;font-size:12.5px}
+  a{color:var(--brand)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>Gaia <span>Trader</span></h1>
+    <span class="selo">Fase 0 · esqueleto</span>
+  </header>
+
+  <p class="sub">
+    Esta página não consulta o Yahoo. Ela lê do <strong>nosso banco de dados</strong>,
+    alimentado pela rotina de ingestão que roda no servidor. É a prova de que o
+    caminho completo funciona: provedor, ingestão, banco, API e gráfico.
+  </p>
+
+  <div class="cards" id="cards"></div>
+
+  <section class="painel">
+    <div class="ph"><strong id="titulo">—</strong><em id="meta"></em></div>
+    <div id="chart"><p class="vazio" id="vazio">Carregando…</p></div>
+  </section>
+
+  <footer id="rodape"></footer>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/lightweight-charts/4.1.3/lightweight-charts.standalone.production.js"></script>
+<script>
+const TICKER = new URLSearchParams(location.search).get("ticker") || "PETR4";
+
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const nf = (v, d = 2) => v == null ? "–" :
+  v.toLocaleString("pt-BR", { minimumFractionDigits: d, maximumFractionDigits: d });
+const pc = v => (v > 0 ? "+" : "") + nf(v) + "%";
+
+function cartoes(bars, ativo) {
+  if (!bars.length) return;
+  const n = bars.length - 1;
+  const ult = bars[n];
+  const varDia = n > 0 ? ((ult.c / bars[n - 1].c) - 1) * 100 : 0;
+  const moeda = ativo?.currency === "USD" ? "US$ " : "R$ ";
+
+  const itens = [
+    ["Último", moeda + nf(ult.c)],
+    ["Dia", `<span class="${varDia >= 0 ? "up" : "down"}">${pc(varDia)}</span>`],
+    ["Pregão", ult.d.split("-").reverse().join("/") + (ult.partial ? " (parcial)" : "")],
+    ["Candles no banco", String(bars.length)],
+  ];
+
+  document.getElementById("cards").innerHTML = itens
+    .map(([t, v]) => `<div class="card"><b>${t}</b><span>${v}</span></div>`)
+    .join("");
+}
+
+function desenhar(bars) {
+  const el = document.getElementById("chart");
+  document.getElementById("vazio")?.remove();
+
+  const chart = LightweightCharts.createChart(el, {
+    height: el.clientHeight || 420,
+    autoSize: true,
+    layout: {
+      background: { type: "solid", color: css("--panel") },
+      textColor: css("--muted"),
+      fontFamily: "ui-monospace, monospace",
+      fontSize: 11,
+    },
+    grid: { vertLines: { color: css("--line") }, horzLines: { color: css("--line") } },
+    rightPriceScale: { borderColor: css("--line"), minimumWidth: 64 },
+    timeScale: { borderColor: css("--line") },
+    crosshair: { mode: 0 },
+    localization: { locale: "pt-BR" },
+  });
+
+  const serie = chart.addCandlestickSeries({
+    upColor: css("--up"), downColor: css("--down"),
+    borderUpColor: css("--up"), borderDownColor: css("--down"),
+    wickUpColor: css("--up"), wickDownColor: css("--down"),
+  });
+
+  serie.setData(bars.map(b => ({ time: b.d, open: b.o, high: b.h, low: b.l, close: b.c })));
+  chart.timeScale().fitContent();
+}
+
+(async () => {
+  try {
+    const [dados, status] = await Promise.all([
+      fetch(`/api/bars?ticker=${encodeURIComponent(TICKER)}`).then(r => r.json()),
+      fetch("/api/status").then(r => r.json()).catch(() => null),
+    ]);
+
+    document.getElementById("titulo").textContent =
+      dados.ativo?.name ? `${dados.ticker} · ${dados.ativo.name}` : dados.ticker;
+
+    if (!dados.bars?.length) {
+      document.getElementById("vazio").textContent =
+        "Nenhum candle no banco ainda. Rode a carga e recarregue esta página.";
+      document.getElementById("meta").textContent = "banco vazio";
+    } else {
+      document.getElementById("meta").textContent =
+        `${dados.bars.length} candles · ${dados.bars[0].d} até ${dados.bars[dados.bars.length - 1].d}`;
+      cartoes(dados.bars, dados.ativo);
+      desenhar(dados.bars);
+    }
+
+    const u = status?.ultimas_cargas?.[0];
+    document.getElementById("rodape").innerHTML = u
+      ? `Última carga: <code>${u.started_at}</code> · origem <code>${u.provider}</code> ·
+         ${u.ok_count} ok, ${u.fail_count} falhas, ${u.bars_written} candles gravados.`
+      : "Nenhuma carga registrada ainda.";
+  } catch (e) {
+    document.getElementById("vazio").textContent = "Não consegui falar com a API.";
+  }
+})();
+</script>
+</body>
+</html>
