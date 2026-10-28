@@ -179,8 +179,28 @@ export async function selecionarLote(db, opts = {}) {
 
   const { results } = await db
     .prepare(
+      /*
+       * EXISTS, NAO COUNT(*). A diferenca aqui vale mais de 2 milhoes de
+       * linhas lidas por noite.
+       *
+       * Esta consulta e o PRIMEIRO passo de toda varredura, e o unico uso do
+       * resultado e um teste de sim ou nao (ver primeiraVez, mais abaixo).
+       * A versao anterior pedia COUNT(*), que obriga o banco a percorrer TODOS
+       * os candles de cada ativo: cerca de 231 mil linhas para os 96 ativos, a
+       * cada execucao. Como a varredura dispara 12 vezes por noite, isso dava
+       * perto de 2,8 milhoes de linhas lidas por noite so para decidir o que
+       * carregar, contra um limite diario de 5 milhoes no plano gratuito, e sem
+       * nenhum usuario no sistema.
+       *
+       * EXISTS para no primeiro registro encontrado: 1 linha por ativo, 96 no
+       * total. Mesma resposta, 2.400 vezes mais barato.
+       *
+       * Foi assim que descobrimos: a varredura das 18h30 de 28/10/2026 nao
+       * rodou, e nao deixou nem registro de tentativa, porque esta consulta
+       * bateu no limite diario antes de conseguir ler o que precisava.
+       */
       `SELECT a.ticker, a.market, a.range_carregado,
-              (SELECT COUNT(*) FROM daily_bars b WHERE b.ticker = a.ticker) AS n_barras
+              EXISTS (SELECT 1 FROM daily_bars b WHERE b.ticker = a.ticker) AS tem_candle
          FROM assets a
         WHERE a.active = 1
           AND (
@@ -282,7 +302,7 @@ export async function ingerirLote(db, env, opts = {}) {
   const carregados = [];
 
   for (const alvo of alvos) {
-    const primeiraVez = !alvo.n_barras;
+    const primeiraVez = !alvo.tem_candle;
     const range = primeiraVez
       ? opts.rangeInicial || RANGE_INICIAL
       : opts.rangeAtualizacao || RANGE_ATUALIZACAO;
@@ -506,6 +526,79 @@ export async function recarregar(db, env, ticker, range, kind = "recarga") {
       .run();
     throw e;
   }
+}
+
+/*
+ * CONTAGEM TOTAL DE CANDLES, EM CACHE.
+ *
+ * POR QUE NAO CONTAR NA HORA
+ *
+ * COUNT(*) sobre a tabela de candles le as 231 mil linhas. Nao existe atalho no
+ * SQLite: contar tudo exige percorrer tudo. Enquanto essa contagem ficou dentro
+ * da rota /api/status, cada visita a pagina publica custava uma varredura
+ * completa, e onze visitas por dia estouravam o limite de 5 milhoes de linhas
+ * lidas do plano gratuito. O painel de administracao era pior: recarregando a
+ * cada 60 segundos, consumia o orcamento do dia inteiro em 22 minutos.
+ *
+ * A contagem total e um numero informativo, nao uma decisao do sistema. Nada
+ * depende dele estar atualizado ao segundo. Entao ele e calculado UMA vez por
+ * noite, junto da varredura agendada, e guardado. Quem le paga 1 linha em vez
+ * de 231 mil, e a data do calculo vai junto para ninguem confundir snapshot
+ * com tempo real.
+ */
+export async function atualizarContagem(db) {
+  const r = await db
+    .prepare(
+      `SELECT COUNT(*) AS barras,
+              (SELECT COUNT(*) FROM assets a
+                WHERE EXISTS (SELECT 1 FROM daily_bars b WHERE b.ticker = a.ticker)) AS com_candles
+         FROM daily_bars`
+    )
+    .first();
+
+  const valor = JSON.stringify({
+    barras: r?.barras ?? 0,
+    ativos_com_candles: r?.com_candles ?? 0,
+    em: new Date().toISOString(),
+  });
+
+  await db
+    .prepare(
+      `INSERT INTO config (chave, valor, updated_at) VALUES ('contagem_candles', ?, datetime('now'))
+         ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor, updated_at = excluded.updated_at`
+    )
+    .bind(valor)
+    .run();
+
+  return JSON.parse(valor);
+}
+
+/** Le a contagem guardada. Custa 1 linha. Devolve null se nunca foi calculada. */
+export async function lerContagem(db) {
+  const r = await db
+    .prepare(`SELECT valor FROM config WHERE chave = 'contagem_candles'`)
+    .first();
+  if (!r?.valor) return null;
+  try {
+    return JSON.parse(r.valor);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Quantos ativos tem pelo menos um candle. Exato e barato: 1 linha por ativo,
+ * 96 no total, contra 231 mil de um COUNT(DISTINCT ticker) na tabela de candles.
+ */
+export async function ativosComCandles(db) {
+  const r = await db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM assets a
+        WHERE a.active = 1
+          AND EXISTS (SELECT 1 FROM daily_bars b WHERE b.ticker = a.ticker)`
+    )
+    .first();
+  return r?.n ?? 0;
 }
 
 /**

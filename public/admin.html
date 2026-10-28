@@ -251,8 +251,57 @@ async function carregar() {
   }
 }
 
-carregar();
-setInterval(carregar, 60000);
+/*
+ * ATUALIZACAO AUTOMATICA QUE PARA QUANDO NINGUEM ESTA OLHANDO.
+ *
+ * A versao anterior fazia setInterval(carregar, 60000) e pronto: o painel
+ * consultava o banco a cada 60 segundos para sempre, mesmo com a aba no fundo,
+ * mesmo com a maquina esquecida ligada a noite inteira.
+ *
+ * Isso custou o orcamento de um dia. A rota de metricas tinha uma contagem que
+ * varria as 231 mil linhas da tabela de candles, entao cada atualizacao do
+ * painel lia 231 mil linhas, e o limite diario de 5 milhoes do plano gratuito
+ * ia embora em 22 minutos de painel aberto. A consulta caneca foi corrigida no
+ * servidor, mas corrigir so o servidor seria metade do conserto: continuar
+ * consultando uma tela que ninguem esta vendo e desperdicio em qualquer plano.
+ *
+ * Agora: atualiza so com a aba visivel, e ao voltar para a aba atualiza na hora
+ * em vez de esperar o proximo ciclo.
+ */
+const INTERVALO = 60000;
+let timer = null;
+let ultimaLeitura = 0;
+
+async function carregarSeVisivel() {
+  if (document.visibilityState !== "visible") return;
+  ultimaLeitura = Date.now();
+  await carregar();
+}
+
+function ligarCiclo() {
+  if (timer !== null) return;
+  timer = setInterval(carregarSeVisivel, INTERVALO);
+}
+
+function desligarCiclo() {
+  if (timer === null) return;
+  clearInterval(timer);
+  timer = null;
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") {
+    // Ao voltar para a aba, o dado na tela esta velho. Atualiza agora, mas sem
+    // disparar duas leituras seguidas se a troca de aba foi rapida.
+    if (Date.now() - ultimaLeitura > 5000) carregarSeVisivel();
+    ligarCiclo();
+  } else {
+    desligarCiclo();
+  }
+});
+
+carregarSeVisivel();
+ligarCiclo();
 </script>
 </body>
 </html>

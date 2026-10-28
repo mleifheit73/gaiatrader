@@ -12,6 +12,7 @@
 
 import {
   ingerirLote, quantosFaltam, atualizarUm, inconsistentes, recarregar, rasos,
+  atualizarContagem, lerContagem, ativosComCandles,
 } from "./ingest.js";
 import { estado as estadoLimite, liberar, limparAntigos } from "./limites.js";
 import { ajustar, trechoContinuo, intervaloMaximo } from "./ajuste.js";
@@ -174,12 +175,23 @@ async function rotaStatus(env) {
        FROM ingest_runs ORDER BY id DESC LIMIT 10`
   ).all();
 
+  // CUSTO DE LEITURA DESTA ROTA, QUE A PAGINA PUBLICA CHAMA A CADA VISITA.
+  //
+  // A versao anterior tinha COUNT(*) FROM daily_bars e COUNT(DISTINCT ticker)
+  // FROM daily_bars aqui. Cada uma varre as 231 mil linhas da tabela, entao
+  // cada visita a pagina custava cerca de 460 mil linhas lidas, e onze visitas
+  // por dia estouravam o limite de 5 milhoes do plano gratuito. Um site que cai
+  // com onze visitantes nao e um site.
+  //
+  // Agora: os totais de assets leem 96 linhas, a contagem de candles vem do
+  // cache calculado uma vez por noite, e ativosComCandles usa EXISTS, que para
+  // no primeiro registro de cada ativo.
   const totais = await env.DB.prepare(
-    `SELECT (SELECT COUNT(*) FROM assets WHERE active = 1)                      AS ativos,
-            (SELECT COUNT(*) FROM assets WHERE active = 1 AND last_ok_at IS NOT NULL) AS ativos_carregados,
-            (SELECT COUNT(*) FROM daily_bars)                                   AS barras,
-            (SELECT COUNT(DISTINCT ticker) FROM daily_bars)                      AS ativos_com_candles`
+    `SELECT (SELECT COUNT(*) FROM assets WHERE active = 1)                                AS ativos,
+            (SELECT COUNT(*) FROM assets WHERE active = 1 AND last_ok_at IS NOT NULL)     AS ativos_carregados`
   ).first();
+
+  const contagem = await lerContagem(env.DB);
 
   const { results: comErro } = await env.DB.prepare(
     `SELECT ticker, last_error, last_error_at FROM assets
@@ -187,7 +199,14 @@ async function rotaStatus(env) {
   ).all();
 
   return json({
-    totais,
+    totais: {
+      ...totais,
+      ativos_com_candles: await ativosComCandles(env.DB),
+      // Numero calculado uma vez por noite, nao em tempo real. A data vai junto
+      // de proposito: snapshot apresentado como tempo real engana.
+      barras: contagem?.barras ?? null,
+      barras_apuradas_em: contagem?.em ?? null,
+    },
     faltam_carregar: await quantosFaltam(env.DB),
     ativos_com_erro: comErro || [],
     ultimas_cargas: runs || [],
@@ -260,10 +279,14 @@ export default {
 
         const [limite, totais] = await Promise.all([
           estadoLimite(env.DB, env),
+          // Mesma correcao da rota /api/status, e aqui era mais grave: o painel
+          // se recarrega a cada 60 segundos, entao o COUNT(*) FROM daily_bars
+          // consumia 231 mil linhas por minuto. Painel aberto por 22 minutos
+          // gastava o orcamento diario inteiro. Alarme que custa varredura e
+          // passivo, nao protecao.
           env.DB.prepare(
             `SELECT (SELECT COUNT(*) FROM assets WHERE active = 1)                               AS ativos,
                     (SELECT COUNT(*) FROM assets WHERE active = 1 AND last_ok_at IS NOT NULL)    AS carregados,
-                    (SELECT COUNT(*) FROM daily_bars)                                            AS barras,
                     (SELECT COUNT(*) FROM assets WHERE last_error IS NOT NULL)                   AS com_erro`
           ).first(),
         ]);
@@ -286,10 +309,16 @@ export default {
             WHERE last_error IS NOT NULL ORDER BY last_error_at DESC LIMIT 15`
         ).all();
 
+        const contagem = await lerContagem(env.DB);
+
         return json({
           agora: new Date().toISOString(),
           limite,
-          totais,
+          totais: {
+            ...totais,
+            barras: contagem?.barras ?? null,
+            barras_apuradas_em: contagem?.em ?? null,
+          },
           faltam_carregar: await quantosFaltam(env.DB),
           // Deve ser sempre uma lista vazia. Qualquer nome aqui indica defeito
           // gravando o marcador de sucesso antes dos dados.
@@ -395,6 +424,13 @@ export default {
           });
           console.log("carga agendada:", JSON.stringify(resumo));
           await limparAntigos(env.DB, 30);
+
+          // UMA varredura completa por noite, aqui e so aqui. Custa 231 mil
+          // linhas (4,6% do orcamento diario) e alimenta o numero que as telas
+          // passam a ler por 1 linha. E o unico lugar do sistema onde uma
+          // varredura completa e aceitavel, porque roda uma vez e nao esta no
+          // caminho de nenhuma tela.
+          if (resumo?.no_lote > 0) await atualizarContagem(env.DB);
         } catch (e) {
           // Sem este try, uma excecao aqui some sem deixar rastro, e a carga
           // falha em silencio. Ja perdemos tempo com isso uma vez.
