@@ -52,13 +52,24 @@ export const mock = {
         c: +preco.toFixed(2),
         v: Math.round(1e6 * (0.5 + rnd())),
         partial: i === dias.length - 1 ? 1 : 0,
+        acRef: null,
       });
     });
+
+    // Um dividendo e um desdobramento plantados em datas fixas, para que o
+    // calculo de ajuste tenha o que exercitar sem depender de rede. Sem isso o
+    // teste offline passaria por um caminho que a producao nunca usa.
+    const eventos = { dividendos: [], desdobramentos: [] };
+    if (dias.length > 120) {
+      eventos.dividendos.push({ d: dias[dias.length - 60], valor: +(preco * 0.02).toFixed(2) });
+      eventos.desdobramentos.push({ d: dias[dias.length - 120], razao: 2 });
+    }
 
     return {
       name: `${ticker} (serie simulada)`,
       currency: market === "cripto" ? "USD" : "BRL",
       bars,
+      eventos,
     };
   },
 };

@@ -10,8 +10,12 @@
  *  - respostas de erro sem vazar detalhe interno
  */
 
-import { ingerirLote, quantosFaltam, atualizarUm, inconsistentes } from "./ingest.js";
+import {
+  ingerirLote, quantosFaltam, atualizarUm, inconsistentes, recarregar, rasos,
+} from "./ingest.js";
 import { estado as estadoLimite, liberar, limparAntigos } from "./limites.js";
+import { ajustar, trechoContinuo, intervaloMaximo } from "./ajuste.js";
+import { costurar } from "./costura.js";
 
 const json = (data, status = 200, extra = {}) =>
   new Response(JSON.stringify(data, null, 2), {
@@ -103,11 +107,60 @@ async function rotaBarras(url, env, ctx) {
     );
   }
 
+  // Ordem crescente a partir daqui: e a ordem que o calculo de ajuste espera.
+  let bars = (results || []).reverse();
+  const totalBruto = bars.length;
+
+  // DUAS SERIES, UMA FONTE.
+  //
+  // O banco guarda sempre o preco bruto, igual ao da corretora. A serie
+  // ajustada por proventos e calculada aqui, na leitura, e nunca gravada: o
+  // provedor recalcula o ajuste de todo o historico a cada dividendo novo, e um
+  // valor ajustado gravado envelheceria em silencio. O motivo completo esta em
+  // migrations/0004_eventos.sql.
+  //
+  // Grafico pede o bruto (padrao). Indicador pede ajustado=1.
+  const querAjustado = url.searchParams.get("ajustado") === "1";
+  const querContinuo = url.searchParams.get("continuo") === "1";
+
+  let ajuste = null;
+  let corte = null;
+
+  if (querAjustado) {
+    const { results: eventos } = await env.DB.prepare(
+      `SELECT d, kind, valor FROM corporate_events WHERE ticker = ? ORDER BY d`
+    )
+      .bind(ticker)
+      .all();
+
+    const r = ajustar(bars, eventos || []);
+    bars = r.bars;
+    // Evento recusado aparece na resposta de proposito. Ajuste que falha calado
+    // e pior que ajuste nenhum, porque ninguem descobre.
+    ajuste = { eventos_aplicados: r.aplicados, eventos_recusados: r.recusados };
+  }
+
+  // O ajuste vem antes do corte porque o ajuste de um dividendo precisa do
+  // fechamento anterior a data ex, e cortar primeiro poderia jogar esse
+  // fechamento fora da janela.
+  if (querContinuo) {
+    const t = trechoContinuo(bars, intervaloMaximo(ativo?.market));
+    bars = t.bars;
+    corte = t.cortado ? t.buraco : null;
+  }
+
   return json({
     ticker,
     ativo: ativo || null,
-    total: results.length,
-    bars: (results || []).reverse(),
+    total: bars.length,
+    serie: querAjustado ? "ajustada" : "bruta",
+    bars,
+    ajuste,
+    // Quando preenchido, a serie tem um buraco e so o trecho posterior a ele foi
+    // devolvido. Acontece em troca de codigo (NATU3) e em ativo com candle solto
+    // antes do inicio de verdade (AVAX).
+    trecho_cortado_em: corte,
+    descartados_pelo_corte: querContinuo ? totalBruto - bars.length : 0,
     frescor: {
       minutos_desde_ultima_carga: controle?.last_ok_at ? minutosDesde : null,
       atualizando_em_segundo_plano: !!(velho && ativo && ctx),
@@ -241,10 +294,73 @@ export default {
           // Deve ser sempre uma lista vazia. Qualquer nome aqui indica defeito
           // gravando o marcador de sucesso antes dos dados.
           carregados_sem_candles: await inconsistentes(env.DB),
+          // Ativos carregados com menos historico do que o desejado. Foi o
+          // defeito que manteve o PETR4 em 2 anos sem ninguem notar.
+          historico_raso: await rasos(env.DB),
           consumo_por_hora: porHora || [],
           ultimas_cargas: cargas || [],
           ativos_com_erro: erros || [],
         });
+      }
+
+      // RECARGA FORCADA DE UM ATIVO, COM PERIODO EXPLICITO.
+      //
+      // A carga em lote nao tem como aprofundar o historico de um ativo que ja
+      // foi carregado: a regra automatica da 10 anos para ativo vazio e 3 meses
+      // para ativo com qualquer candle. O PETR4 ficou preso em 2 anos por isso.
+      //
+      // Serve tambem para emendar o historico de um codigo antigo da B3 e para
+      // reparar um ativo sem esperar o ciclo diario.
+      if (rota === "/api/admin/recarregar" && request.method === "POST") {
+        const check = conferirAdmin(request, env);
+        if (check === "sem_segredo_no_servidor") {
+          return erro("O segredo ADMIN_TOKEN nao esta configurado neste Worker.", 503);
+        }
+        if (check !== "ok") return erro("nao autorizado", 401);
+
+        const ticker = (url.searchParams.get("ticker") || "").toUpperCase().trim();
+        const range = url.searchParams.get("range") || "10y";
+        if (!/^[A-Z0-9^=.-]{1,20}$/.test(ticker)) return erro("ticker invalido");
+
+        try {
+          return json(await recarregar(env.DB, env, ticker, range, "recarga"));
+        } catch (e) {
+          // Devolve o motivo: esta rota e de administracao e quem a chama
+          // precisa saber se o problema foi o periodo, o ativo ou o orcamento.
+          return erro(String(e?.message || e).slice(0, 300), 400);
+        }
+      }
+
+      // EMENDA O HISTORICO DE UM CODIGO ANTIGO DA B3 NO ATIVO ATUAL.
+      //
+      // Simula por padrao. Grava so com aplicar=1. A simulacao existe porque
+      // emendar serie errado nao da erro nenhum: so cria um degrau de preco que
+      // todo indicador le como rompimento, e ninguem descobre por meses.
+      if (rota === "/api/admin/costurar" && request.method === "POST") {
+        const check = conferirAdmin(request, env);
+        if (check === "sem_segredo_no_servidor") {
+          return erro("O segredo ADMIN_TOKEN nao esta configurado neste Worker.", 503);
+        }
+        if (check !== "ok") return erro("nao autorizado", 401);
+
+        const ticker = (url.searchParams.get("ticker") || "").toUpperCase().trim();
+        const predecessor = (url.searchParams.get("predecessor") || "").toUpperCase().trim();
+        if (!/^[A-Z0-9^=.-]{1,20}$/.test(ticker)) return erro("ticker invalido");
+        if (!/^[A-Z0-9^=.-]{1,20}$/.test(predecessor)) return erro("predecessor invalido");
+
+        try {
+          return json(
+            await costurar(env.DB, env, ticker, {
+              predecessor,
+              ate: url.searchParams.get("ate") || "",
+              range: url.searchParams.get("range") || "10y",
+              razao: url.searchParams.get("razao") || undefined,
+              simular: url.searchParams.get("aplicar") !== "1",
+            })
+          );
+        } catch (e) {
+          return erro(String(e?.message || e).slice(0, 300), 400);
+        }
       }
 
       // Tira o sistema do recuo automatico antes da hora, se eu decidir que ja da.

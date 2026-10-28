@@ -95,6 +95,80 @@ async function gravarBarras(db, ticker, bars, src) {
   return bars.length;
 }
 
+/*
+ * PROFUNDIDADE DE HISTORICO
+ *
+ * Guardamos qual periodo ja foi pedido ao provedor para cada ativo, e nunca
+ * deixamos esse registro regredir: a atualizacao diaria pede 3 meses, e se ela
+ * sobrescrevesse o registro, um ativo com 10 anos carregados passaria a parecer
+ * raso no dia seguinte.
+ *
+ * Isto existe porque o PETR4 ficou travado em 2 anos sem ninguem notar. A carga
+ * escolhia o periodo pela pergunta errada ("tem algum candle?") em vez da certa
+ * ("tem a profundidade que eu quero?").
+ */
+const DIAS_DO_RANGE = {
+  "1d": 1, "5d": 5, "1mo": 30, "3mo": 92, "6mo": 183,
+  "1y": 365, "2y": 730, "5y": 1826, "10y": 3653, "max": 36500,
+};
+
+export function profundidadeEmDias(range) {
+  return DIAS_DO_RANGE[range] || 0;
+}
+
+/** Devolve o mais fundo entre dois periodos, para o registro nunca regredir. */
+function rangeMaisFundo(atual, novo) {
+  return profundidadeEmDias(novo) >= profundidadeEmDias(atual) ? novo : atual;
+}
+
+/*
+ * GRAVACAO DE EVENTOS CORPORATIVOS
+ *
+ * Guardamos dividendos e desdobramentos em vez de guardar o preco ajustado.
+ * O motivo esta escrito por extenso em migrations/0004_eventos.sql: o provedor
+ * recalcula o ajustado de todo o historico a cada provento novo, e como a nossa
+ * atualizacao diaria so reescreve os ultimos meses, um ajustado gravado
+ * envelheceria em silencio e pioraria a cada dividendo.
+ */
+const COLUNAS_EVENTO = 6;
+const EVENTOS_POR_COMANDO = 15;  // 15 x 6 = 90 parametros, sob o limite de 100 do D1
+
+const SUFIXO_CONFLITO_EVENTO = `ON CONFLICT(ticker, d, kind) DO UPDATE SET
+   valor = excluded.valor, src = excluded.src, updated_at = excluded.updated_at`;
+
+/** Grava dividendos e desdobramentos. Devolve quantos foram escritos. */
+async function gravarEventos(db, ticker, eventos, src) {
+  const linhas = [
+    ...(eventos?.dividendos || []).map((e) => ({ d: e.d, kind: "div", valor: e.valor })),
+    ...(eventos?.desdobramentos || []).map((e) => ({ d: e.d, kind: "split", valor: e.razao })),
+  ].filter((e) => e.d && Number(e.valor) > 0);
+
+  if (!linhas.length) return 0;
+
+  const agora = new Date().toISOString().replace("T", " ").slice(0, 19);
+  const tupla = "(" + new Array(COLUNAS_EVENTO).fill("?").join(",") + ")";
+  const comandos = [];
+
+  for (let i = 0; i < linhas.length; i += EVENTOS_POR_COMANDO) {
+    const fatia = linhas.slice(i, i + EVENTOS_POR_COMANDO);
+    const params = [];
+    for (const e of fatia) params.push(ticker, e.d, e.kind, Number(e.valor), src, agora);
+    comandos.push(
+      db
+        .prepare(
+          `INSERT INTO corporate_events (ticker, d, kind, valor, src, updated_at) VALUES ` +
+            new Array(fatia.length).fill(tupla).join(",") +
+            " " +
+            SUFIXO_CONFLITO_EVENTO
+        )
+        .bind(...params)
+    );
+  }
+
+  await db.batch(comandos);
+  return linhas.length;
+}
+
 /**
  * Escolhe o proximo lote: os ativos ativos mais desatualizados primeiro,
  * ignorando os que ja foram carregados ha pouco tempo.
@@ -105,7 +179,7 @@ export async function selecionarLote(db, opts = {}) {
 
   const { results } = await db
     .prepare(
-      `SELECT a.ticker, a.market,
+      `SELECT a.ticker, a.market, a.range_carregado,
               (SELECT COUNT(*) FROM daily_bars b WHERE b.ticker = a.ticker) AS n_barras
          FROM assets a
         WHERE a.active = 1
@@ -229,22 +303,29 @@ export async function ingerirLote(db, env, opts = {}) {
       // Enquanto ele nao existe, o ativo continua na fila e a proxima tentativa
       // conserta sozinha, porque a gravacao e idempotente.
       const n = await gravarBarras(db, alvo.ticker, info.bars, provider.name);
+      const nEventos = await gravarEventos(db, alvo.ticker, info.eventos, provider.name);
 
       await db
         .prepare(
           `UPDATE assets
               SET name = COALESCE(?, name), currency = ?,
+                  range_carregado = ?,
                   last_ok_at = datetime('now'),
                   last_error = NULL, last_error_at = NULL,
                   updated_at = datetime('now')
             WHERE ticker = ?`
         )
-        .bind(info.name, info.currency, alvo.ticker)
+        .bind(
+          info.name,
+          info.currency,
+          rangeMaisFundo(alvo.range_carregado, range),
+          alvo.ticker
+        )
         .run();
 
       barras += n;
       ok++;
-      carregados.push({ ticker: alvo.ticker, range, barras: n });
+      carregados.push({ ticker: alvo.ticker, range, barras: n, eventos: nEventos });
     } catch (e) {
       // Estouro de orcamento ou recuo nao e falha do ativo: e decisao nossa de
       // nao gastar. Interrompe a carga sem marcar o ativo como problematico.
@@ -323,18 +404,141 @@ export async function atualizarUm(db, env, ticker, market, kind = "demanda") {
   // Mesma regra da carga em lote: candles primeiro, marcador de sucesso por
   // ultimo. Ver o comentario longo em ingerirLote sobre por que a ordem importa.
   const n = await gravarBarras(db, ticker, info.bars, provider.name);
+  const nEventos = await gravarEventos(db, ticker, info.eventos, provider.name);
 
   await db
     .prepare(
       `UPDATE assets
           SET name = COALESCE(?, name), currency = ?,
+              range_carregado = ?,
               last_ok_at = datetime('now'),
               last_error = NULL, last_error_at = NULL,
               updated_at = datetime('now')
         WHERE ticker = ?`
     )
-    .bind(info.name, info.currency, ticker)
+    .bind(info.name, info.currency, rangeMaisFundo(r?.range_carregado, range), ticker)
     .run();
 
-  return { ticker, range, barras: n };
+  return { ticker, range, barras: n, eventos: nEventos };
+}
+
+/**
+ * RECARGA FORCADA DE UM ATIVO, COM PERIODO EXPLICITO.
+ *
+ * POR QUE PRECISA EXISTIR
+ *
+ * A carga em lote escolhe o periodo por uma regra automatica: ativo sem candle
+ * recebe 10 anos, ativo com candle recebe 3 meses. Essa regra nao tem como
+ * aprofundar o historico de um ativo que ja foi carregado raso.
+ *
+ * O PETR4 provou o problema: carregado com 2 anos na Fase 0, ficou com 498
+ * candles em vez de 2.491 e nunca mais voltaria a fila, porque pela regra ele
+ * "ja estava carregado". Nenhum alarme dispararia, porque nenhum alarme olhava
+ * para a profundidade.
+ *
+ * Esta rota tambem e o caminho para emendar o historico de um codigo antigo e
+ * para reparar um ativo qualquer sem esperar o ciclo diario.
+ */
+export async function recarregar(db, env, ticker, range, kind = "recarga") {
+  const provider = getProvider(null, env);
+
+  const ativo = await db
+    .prepare(`SELECT ticker, market, range_carregado FROM assets WHERE ticker = ?`)
+    .bind(ticker)
+    .first();
+
+  if (!ativo) throw new Error(`ativo desconhecido no catalogo: ${ticker}`);
+  if (!profundidadeEmDias(range)) throw new Error(`periodo invalido: ${range}`);
+
+  // Toda carga e registrada, inclusive a manual. Carga que acontece sem deixar
+  // rastro e carga que ninguem consegue auditar depois.
+  const run = await db
+    .prepare(`INSERT INTO ingest_runs (kind, provider, started_at) VALUES (?, ?, ?) RETURNING id`)
+    .bind(kind, provider.name, new Date().toISOString())
+    .first();
+
+  try {
+    const info = await consultar(db, env, provider, ticker, ativo.market, { range }, kind);
+    if (!info.bars.length) throw new Error("serie vazia");
+
+    // Candles primeiro, marcador por ultimo. Mesma regra da carga em lote.
+    const n = await gravarBarras(db, ticker, info.bars, provider.name);
+    const nEventos = await gravarEventos(db, ticker, info.eventos, provider.name);
+
+    await db
+      .prepare(
+        `UPDATE assets
+            SET name = COALESCE(?, name), currency = ?,
+                range_carregado = ?,
+                last_ok_at = datetime('now'),
+                last_error = NULL, last_error_at = NULL,
+                updated_at = datetime('now')
+          WHERE ticker = ?`
+      )
+      .bind(info.name, info.currency, rangeMaisFundo(ativo.range_carregado, range), ticker)
+      .run();
+
+    const resumo = {
+      ticker,
+      range,
+      barras: n,
+      eventos: nEventos,
+      primeiro: info.bars[0]?.d || null,
+      ultimo: info.bars[info.bars.length - 1]?.d || null,
+    };
+
+    await db
+      .prepare(
+        `UPDATE ingest_runs SET finished_at = ?, ok_count = 1, bars_written = ?, detail = ?
+          WHERE id = ?`
+      )
+      .bind(new Date().toISOString(), n, JSON.stringify(resumo), run?.id)
+      .run();
+
+    return resumo;
+  } catch (e) {
+    const msg = String(e?.message || e).slice(0, 300);
+    await db
+      .prepare(
+        `UPDATE ingest_runs SET finished_at = ?, fail_count = 1, detail = ? WHERE id = ?`
+      )
+      .bind(new Date().toISOString(), JSON.stringify({ ticker, range, erro: msg }), run?.id)
+      .run();
+    throw e;
+  }
+}
+
+/**
+ * Ativos carregados com menos profundidade do que a desejada.
+ *
+ * Serve de alarme no painel, do mesmo jeito que inconsistentes(). Deve ficar
+ * vazio depois que todo ativo tiver sido carregado com o periodo cheio.
+ *
+ * CUSTO DE LEITURA, DE PROPOSITO MAGRO
+ *
+ * Nao conta candles por ativo. Um COUNT(*) por ticker sobre 96 ativos le a
+ * tabela inteira de candles, e no plano gratuito do D1 (5 milhoes de linhas
+ * lidas por dia) um alarme assim no painel custaria uma varredura completa a
+ * cada abertura de tela. MIN(d) e barato porque o indice resolve com uma busca.
+ */
+export async function rasos(db, alvoRange = RANGE_INICIAL) {
+  const { results } = await db
+    .prepare(
+      `SELECT a.ticker, a.range_carregado,
+              (SELECT MIN(b.d) FROM daily_bars b WHERE b.ticker = a.ticker) AS primeiro
+         FROM assets a
+        WHERE a.active = 1
+        ORDER BY a.ticker`
+    )
+    .all();
+
+  const minimo = profundidadeEmDias(alvoRange);
+
+  return (results || [])
+    .filter((r) => profundidadeEmDias(r.range_carregado) < minimo)
+    .map((r) => ({
+      ticker: r.ticker,
+      range_carregado: r.range_carregado || null,
+      primeiro_candle: r.primeiro || null,
+    }));
 }
