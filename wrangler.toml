@@ -18,10 +18,7 @@ database_id = "d0143976-772a-4ca7-92fa-c3fb227effb6"
 # entao o deslocamento e fixo em UTC-3 o ano inteiro e nao ha ajuste sazonal.
 # De segunda a sexta, porque nao ha pregao no fim de semana.
 [triggers]
-# TEMPORARIO: a segunda linha roda a cada 5 minutos, so para provar a primeira
-# carga da Fase 0 sem depender do segredo de administracao. REMOVER assim que a
-# primeira carga real for confirmada.
-crons = ["30 21 * * 1-5", "*/5 * * * *"]
+crons = ["30 21 * * 1-5"]
 
 [vars]
 # Provedor de cotacoes em uso. Trocar aqui quando houver licenca comercial.
