@@ -9,9 +9,11 @@
  */
 
 import { yahoo } from "./yahoo.js";
+import { mock } from "./mock.js";
 
 const PROVEDORES = {
   yahoo,
+  mock, // deterministico, so para teste; nunca como padrao
 };
 
 const PADRAO = "yahoo";
