@@ -24,17 +24,28 @@ const json = (data, status = 200, extra = {}) =>
 
 const erro = (msg, status = 400) => json({ erro: msg }, status);
 
-/** Confere o cabecalho de administracao em tempo constante. */
-function adminAutorizado(request, env) {
+/**
+ * Confere o cabecalho de administracao em tempo constante.
+ *
+ * Devolve um motivo em vez de um booleano porque "o segredo nao esta configurado
+ * no servidor" e "o segredo enviado esta errado" sao problemas completamente
+ * diferentes, e responder 401 para os dois torna o defeito impossivel de
+ * diagnosticar de fora. Distinguir os dois nao vaza nada util para um atacante:
+ * ele descobre apenas que o servidor esta mal configurado, nunca o valor.
+ */
+function conferirAdmin(request, env) {
   const esperado = env.ADMIN_TOKEN;
-  if (!esperado) return false;
+  if (!esperado) return "sem_segredo_no_servidor";
+
   const recebido = request.headers.get("x-admin-token") || "";
-  if (recebido.length !== esperado.length) return false;
+  if (!recebido) return "sem_cabecalho";
+
+  if (recebido.length !== esperado.length) return "nao_confere";
   let diff = 0;
   for (let i = 0; i < esperado.length; i++) {
     diff |= esperado.charCodeAt(i) ^ recebido.charCodeAt(i);
   }
-  return diff === 0;
+  return diff === 0 ? "ok" : "nao_confere";
 }
 
 async function rotaBarras(url, env) {
@@ -88,7 +99,19 @@ export default {
 
     try {
       if (rota === "/api/health") {
-        return json({ ok: true, fase: 0, agora: new Date().toISOString() });
+        // Reporta apenas SE os bindings existem, nunca o conteudo deles.
+        // Serve para diagnosticar configuracao sem precisar de acesso ao painel.
+        return json({
+          ok: true,
+          fase: 0,
+          agora: new Date().toISOString(),
+          config: {
+            banco_conectado: !!env.DB,
+            arquivos_conectados: !!env.ASSETS,
+            admin_token_configurado: !!env.ADMIN_TOKEN,
+            provedor: env.DATA_PROVIDER || "(padrao)",
+          },
+        });
       }
 
       if (rota === "/api/bars") return rotaBarras(url, env);
@@ -98,7 +121,20 @@ export default {
       // Dispara uma carga manualmente, para nao depender do horario do agendamento
       // durante o desenvolvimento. Protegido por segredo.
       if (rota === "/api/admin/ingest" && request.method === "POST") {
-        if (!adminAutorizado(request, env)) return erro("nao autorizado", 401);
+        const check = conferirAdmin(request, env);
+        if (check === "sem_segredo_no_servidor") {
+          return erro(
+            "O segredo ADMIN_TOKEN nao esta configurado neste Worker. " +
+              "Defina-o em Settings, Variables and Secrets, e tente de novo.",
+            503
+          );
+        }
+        if (check === "sem_cabecalho") {
+          return erro("Faltou o cabecalho x-admin-token na requisicao.", 401);
+        }
+        if (check !== "ok") {
+          return erro("O valor de x-admin-token nao confere com o segredo do servidor.", 401);
+        }
         const alvos = await alvosDaCarga(env.DB);
         const resumo = await ingerir(env.DB, env, alvos, { kind: "manual", range: "2y" });
         return json(resumo);
