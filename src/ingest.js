@@ -27,33 +27,59 @@ const FRESCOR_HORAS = 6;
 const RANGE_INICIAL = "10y";
 const RANGE_ATUALIZACAO = "3mo";
 
+/*
+ * GRAVACAO EM BLOCO
+ *
+ * A primeira versao gravava um comando por candle, agrupados de 50 em 50. Para
+ * 10 anos de historico isso dava 166 idas e voltas ao banco por ativo, e medimos
+ * cerca de 1 minuto para 3 ativos. O gargalo nao era buscar no Yahoo, era a
+ * conversa com o banco.
+ *
+ * Agora cada comando insere varias linhas de uma vez, e varios comandos viajam
+ * juntos. O limite real e a quantidade de parametros por comando no SQLite, que
+ * e 999; com 10 colunas por linha, cabem 90 linhas com folga. Dez comandos por
+ * viagem dao 900 candles por ida ao banco, contra 50 antes.
+ */
+const COLUNAS = 10;
+const LINHAS_POR_COMANDO = 90;   // 90 x 10 colunas = 900 parametros, sob o limite de 999
+const COMANDOS_POR_VIAGEM = 10;  // 900 candles por ida ao banco
+
+const SUFIXO_CONFLITO = `ON CONFLICT(ticker, d) DO UPDATE SET
+   o = excluded.o, h = excluded.h, l = excluded.l, c = excluded.c,
+   v = excluded.v, partial = excluded.partial,
+   src = excluded.src, updated_at = excluded.updated_at`;
+
+function montarInsert(n) {
+  const tupla = "(" + new Array(COLUNAS).fill("?").join(",") + ")";
+  return (
+    `INSERT INTO daily_bars (ticker, d, o, h, l, c, v, partial, src, updated_at) VALUES ` +
+    new Array(n).fill(tupla).join(",") +
+    " " +
+    SUFIXO_CONFLITO
+  );
+}
+
 /** Grava as barras de um ativo. Devolve quantas linhas foram escritas. */
 async function gravarBarras(db, ticker, bars, src) {
   if (!bars.length) return 0;
 
   const agora = new Date().toISOString().replace("T", " ").slice(0, 19);
-  const LOTE_SQL = 50;
-  let escritas = 0;
+  const comandos = [];
 
-  for (let i = 0; i < bars.length; i += LOTE_SQL) {
-    const fatia = bars.slice(i, i + LOTE_SQL);
-    const stmts = fatia.map((b) =>
-      db
-        .prepare(
-          `INSERT INTO daily_bars (ticker, d, o, h, l, c, v, partial, src, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-           ON CONFLICT(ticker, d) DO UPDATE SET
-             o = excluded.o, h = excluded.h, l = excluded.l, c = excluded.c,
-             v = excluded.v, partial = excluded.partial,
-             src = excluded.src, updated_at = excluded.updated_at`
-        )
-        .bind(ticker, b.d, b.o, b.h, b.l, b.c, b.v, b.partial, src, agora)
-    );
-    await db.batch(stmts);
-    escritas += fatia.length;
+  for (let i = 0; i < bars.length; i += LINHAS_POR_COMANDO) {
+    const fatia = bars.slice(i, i + LINHAS_POR_COMANDO);
+    const params = [];
+    for (const b of fatia) {
+      params.push(ticker, b.d, b.o, b.h, b.l, b.c, b.v, b.partial, src, agora);
+    }
+    comandos.push(db.prepare(montarInsert(fatia.length)).bind(...params));
   }
 
-  return escritas;
+  for (let i = 0; i < comandos.length; i += COMANDOS_POR_VIAGEM) {
+    await db.batch(comandos.slice(i, i + COMANDOS_POR_VIAGEM));
+  }
+
+  return bars.length;
 }
 
 /**
