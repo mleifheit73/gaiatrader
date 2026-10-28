@@ -63,7 +63,11 @@
 
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/lightweight-charts/4.1.3/lightweight-charts.standalone.production.js"></script>
+<!-- A biblioteca de graficos e servida pelo nosso proprio dominio, de proposito.
+     Depender de CDN externo significa que uma indisponibilidade deles, ou um
+     endereco que muda de lugar, derruba o grafico do nosso produto. Foi
+     exatamente o que aconteceu na primeira tentativa. -->
+<script src="/vendor/lightweight-charts-4.1.3.js"></script>
 <script>
 const TICKER = new URLSearchParams(location.search).get("ticker") || "PETR4";
 
@@ -91,8 +95,32 @@ function cartoes(bars, ativo) {
     .join("");
 }
 
+/**
+ * Mostra uma mensagem na area do grafico.
+ * Recria o elemento se ele ja tiver sido removido: uma pagina que falha em
+ * silencio, deixando so um retangulo vazio, e pior que uma que mostra o erro.
+ */
+function aviso(texto) {
+  const el = document.getElementById("chart");
+  let p = document.getElementById("vazio");
+  if (!p) {
+    p = document.createElement("p");
+    p.id = "vazio";
+    p.className = "vazio";
+    el.innerHTML = "";
+    el.appendChild(p);
+  }
+  p.textContent = texto;
+}
+
 function desenhar(bars) {
   const el = document.getElementById("chart");
+
+  if (typeof LightweightCharts === "undefined") {
+    aviso("A biblioteca de gráficos não carregou. Os dados estão no banco, só o desenho falhou.");
+    return;
+  }
+
   document.getElementById("vazio")?.remove();
 
   const chart = LightweightCharts.createChart(el, {
@@ -132,14 +160,20 @@ function desenhar(bars) {
       dados.ativo?.name ? `${dados.ticker} · ${dados.ativo.name}` : dados.ticker;
 
     if (!dados.bars?.length) {
-      document.getElementById("vazio").textContent =
-        "Nenhum candle no banco ainda. Rode a carga e recarregue esta página.";
+      aviso("Nenhum candle no banco ainda. Rode a carga e recarregue esta página.");
       document.getElementById("meta").textContent = "banco vazio";
     } else {
       document.getElementById("meta").textContent =
         `${dados.bars.length} candles · ${dados.bars[0].d} até ${dados.bars[dados.bars.length - 1].d}`;
       cartoes(dados.bars, dados.ativo);
-      desenhar(dados.bars);
+      // O desenho falha por motivos independentes dos dados (biblioteca que nao
+      // carregou, por exemplo). Isolado, para que um erro aqui nao apague os
+      // numeros que ja foram carregados com sucesso.
+      try {
+        desenhar(dados.bars);
+      } catch (e) {
+        aviso("Os dados carregaram, mas o gráfico não pôde ser desenhado: " + (e?.message || e));
+      }
     }
 
     const u = status?.ultimas_cargas?.[0];
@@ -148,7 +182,7 @@ function desenhar(bars) {
          ${u.ok_count} ok, ${u.fail_count} falhas, ${u.bars_written} candles gravados.`
       : "Nenhuma carga registrada ainda.";
   } catch (e) {
-    document.getElementById("vazio").textContent = "Não consegui falar com a API.";
+    aviso("Não consegui falar com a API: " + (e?.message || e));
   }
 })();
 </script>
