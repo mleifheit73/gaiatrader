@@ -109,7 +109,16 @@ export async function selecionarLote(db, opts = {}) {
               (SELECT COUNT(*) FROM daily_bars b WHERE b.ticker = a.ticker) AS n_barras
          FROM assets a
         WHERE a.active = 1
-          AND (a.last_ok_at IS NULL OR a.last_ok_at < datetime('now', ?))
+          AND (
+                a.last_ok_at IS NULL
+             OR a.last_ok_at < datetime('now', ?)
+             -- Rede de seguranca: ativo marcado como carregado mas SEM candle
+             -- nenhum e um estado impossivel de ser correto. Entra na fila de
+             -- qualquer jeito, ignorando o marcador. Sem esta linha, um defeito
+             -- que marque sucesso cedo demais deixa o ativo vazio para sempre,
+             -- e foi exatamente o que aconteceu uma vez.
+             OR NOT EXISTS (SELECT 1 FROM daily_bars b2 WHERE b2.ticker = a.ticker)
+          )
         ORDER BY (a.last_ok_at IS NOT NULL), a.last_ok_at ASC, a.ticker ASC
         LIMIT ?`
     )
@@ -124,12 +133,32 @@ export async function quantosFaltam(db, opts = {}) {
   const horas = opts.frescorHoras ?? FRESCOR_HORAS;
   const r = await db
     .prepare(
-      `SELECT COUNT(*) AS n FROM assets
-        WHERE active = 1 AND (last_ok_at IS NULL OR last_ok_at < datetime('now', ?))`
+      `SELECT COUNT(*) AS n FROM assets a
+        WHERE a.active = 1
+          AND (a.last_ok_at IS NULL
+            OR a.last_ok_at < datetime('now', ?)
+            OR NOT EXISTS (SELECT 1 FROM daily_bars b WHERE b.ticker = a.ticker))`
     )
     .bind(`-${horas} hours`)
     .first();
   return r?.n ?? 0;
+}
+
+/**
+ * Ativos marcados como carregados que nao tem candle nenhum.
+ * Estado impossivel de ser correto: serve de alarme no painel. Deve ser sempre
+ * zero. Se nao for, ha defeito gravando o marcador de sucesso cedo demais.
+ */
+export async function inconsistentes(db) {
+  const { results } = await db
+    .prepare(
+      `SELECT a.ticker FROM assets a
+        WHERE a.last_ok_at IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM daily_bars b WHERE b.ticker = a.ticker)
+        ORDER BY a.ticker`
+    )
+    .all();
+  return (results || []).map((r) => r.ticker);
 }
 
 /**
@@ -188,6 +217,19 @@ export async function ingerirLote(db, env, opts = {}) {
       const info = await consultar(db, env, provider, alvo.ticker, alvo.market, { range }, kind);
       if (!info.bars.length) throw new Error("serie vazia");
 
+      // A ORDEM AQUI E CRITICA, e errar custou dados.
+      //
+      // Gravar os candles PRIMEIRO, e so depois marcar o ativo como carregado.
+      // Na primeira versao era o contrario, e quando a gravacao dos candles
+      // falhou o ativo ficou marcado como carregado com sucesso sem ter um
+      // unico candle no banco. Pior: por estar marcado, nunca mais voltaria a
+      // fila, e ficaria vazio para sempre, em silencio.
+      //
+      // A regra geral: o marcador de sucesso e a ULTIMA coisa a ser escrita.
+      // Enquanto ele nao existe, o ativo continua na fila e a proxima tentativa
+      // conserta sozinha, porque a gravacao e idempotente.
+      const n = await gravarBarras(db, alvo.ticker, info.bars, provider.name);
+
       await db
         .prepare(
           `UPDATE assets
@@ -200,7 +242,6 @@ export async function ingerirLote(db, env, opts = {}) {
         .bind(info.name, info.currency, alvo.ticker)
         .run();
 
-      const n = await gravarBarras(db, alvo.ticker, info.bars, provider.name);
       barras += n;
       ok++;
       carregados.push({ ticker: alvo.ticker, range, barras: n });
@@ -279,6 +320,10 @@ export async function atualizarUm(db, env, ticker, market, kind = "demanda") {
   const info = await consultar(db, env, provider, ticker, market, { range }, kind);
   if (!info.bars.length) throw new Error("serie vazia");
 
+  // Mesma regra da carga em lote: candles primeiro, marcador de sucesso por
+  // ultimo. Ver o comentario longo em ingerirLote sobre por que a ordem importa.
+  const n = await gravarBarras(db, ticker, info.bars, provider.name);
+
   await db
     .prepare(
       `UPDATE assets
@@ -291,6 +336,5 @@ export async function atualizarUm(db, env, ticker, market, kind = "demanda") {
     .bind(info.name, info.currency, ticker)
     .run();
 
-  const n = await gravarBarras(db, ticker, info.bars, provider.name);
   return { ticker, range, barras: n };
 }

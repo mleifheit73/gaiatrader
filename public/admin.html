@@ -170,6 +170,12 @@ function render(d) {
       <div class="card"><b>Teto por hora</b><span>${L.teto_hora}</span></div>
     </div>
 
+    ${(d.carregados_sem_candles || []).length ? `<div class="aviso">
+        <b>Inconsistência detectada:</b> ${d.carregados_sem_candles.length} ativo(s) marcados como
+        carregados sem nenhum candle no banco (${esc(d.carregados_sem_candles.join(", "))}).
+        Isso não deveria acontecer nunca. O sistema vai recarregá-los na próxima carga automaticamente.
+      </div>` : ""}
+
     <h2>Base de dados</h2>
     <div class="cards">
       <div class="card"><b>Ativos acompanhados</b><span>${d.totais.ativos}</span></div>

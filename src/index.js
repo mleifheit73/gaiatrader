@@ -10,7 +10,7 @@
  *  - respostas de erro sem vazar detalhe interno
  */
 
-import { ingerirLote, quantosFaltam, atualizarUm } from "./ingest.js";
+import { ingerirLote, quantosFaltam, atualizarUm, inconsistentes } from "./ingest.js";
 import { estado as estadoLimite, liberar, limparAntigos } from "./limites.js";
 
 const json = (data, status = 200, extra = {}) =>
@@ -238,6 +238,9 @@ export default {
           limite,
           totais,
           faltam_carregar: await quantosFaltam(env.DB),
+          // Deve ser sempre uma lista vazia. Qualquer nome aqui indica defeito
+          // gravando o marcador de sucesso antes dos dados.
+          carregados_sem_candles: await inconsistentes(env.DB),
           consumo_por_hora: porHora || [],
           ultimas_cargas: cargas || [],
           ativos_com_erro: erros || [],
