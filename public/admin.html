@@ -320,7 +320,21 @@ async function chamarReparo(rota, parametros, botao) {
       headers: { "x-admin-token": token() },
     });
     const corpo = await r.json().catch(() => ({ erro: "resposta ilegível" }));
-    mostrarSaida("HTTP " + r.status + "\n\n" + JSON.stringify(corpo, null, 2));
+
+    // Uma linha em português antes do objeto, porque ninguém deveria precisar
+    // ler JSON para saber se pode clicar no botão seguinte.
+    let manchete;
+    if (!r.ok || corpo?.erro) manchete = "FALHOU: " + (corpo?.erro || "HTTP " + r.status);
+    else if (corpo?.emendado) manchete = `EMENDADO: ${corpo.gravadas} candles gravados, ${corpo.preservadas} preservados.`;
+    else if (corpo?.modo === "simulacao")
+      manchete = `APROVADO NA SIMULAÇÃO: ${corpo.candidatos} candles prontos, ` +
+                 `diferença máxima ${corpo.conferencia?.pior_diferenca_pct}% em ` +
+                 `${corpo.conferencia?.pregoes_em_comum} pregões. Pode aplicar.`;
+    else if (corpo?.motivo) manchete = "RECUSADO: " + corpo.motivo;
+    else if (corpo?.barras !== undefined) manchete = `RECARREGADO: ${corpo.barras} candles.`;
+    else manchete = "HTTP " + r.status;
+
+    mostrarSaida(manchete + "\n\n" + JSON.stringify(corpo, null, 2));
     return { ok: r.ok, corpo };
   } catch (e) {
     mostrarSaida("Falhou: " + (e?.message || e));
@@ -355,15 +369,34 @@ function ligarReparos() {
       if (bt.dataset.aplicar === "1") p.aplicar = "1";
       const res = await chamarReparo("/api/admin/costurar", p, bt);
 
-      // O botão de aplicar só liga depois de uma simulação que deu certo. Ver a
-      // nota na tela: emendar série com degrau de preço não dá erro, só estraga
-      // todo indicador em silêncio.
-      if (bt.dataset.aplicar === "0" && res.ok) {
-        const aplicar = document.querySelector(
-          `[data-costura="${bt.dataset.costura}"][data-aplicar="1"]`);
-        if (aplicar) aplicar.disabled = false;
+      /*
+       * O BOTÃO DE APLICAR SÓ LIGA COM SIMULAÇÃO APROVADA.
+       *
+       * A primeira versão ligava o botão quando a chamada HTTP dava certo, e
+       * isso estava errado: uma RECUSA é uma resposta HTTP bem-sucedida
+       * carregando um "não". O IGTI11 foi recusado com HTTP 200, o botão
+       * habilitou, e o usuário clicou em Aplicar acreditando estar autorizado.
+       *
+       * Nada foi gravado, porque a recusa acontece no servidor antes de
+       * qualquer escrita, mas a tela mentiu sobre o que era permitido. Interface
+       * que contradiz a regra do servidor é defeito mesmo quando o servidor
+       * segura.
+       *
+       * O que distingue aprovação de recusa é o campo "modo": só a simulação
+       * que passou por todas as conferências o traz.
+       */
+      const aprovada = res.corpo?.modo === "simulacao";
+      const aplicar = document.querySelector(
+        `[data-costura="${bt.dataset.costura}"][data-aplicar="1"]`);
+
+      if (bt.dataset.aplicar === "0" && aplicar) {
+        aplicar.disabled = !aprovada;
       }
-      if (bt.dataset.aplicar === "1" && res.ok) carregar();
+      if (bt.dataset.aplicar === "1" && res.corpo?.emendado) {
+        // Emendado de verdade: o reparo acabou, desliga o botão para não repetir.
+        if (aplicar) aplicar.disabled = true;
+        carregar();
+      }
     };
   });
 }
