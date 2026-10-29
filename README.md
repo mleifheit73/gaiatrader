@@ -219,6 +219,39 @@ quebrada. Todos produziriam números errados com aparência perfeita. Em sistema
 dados, a verificação tem que procurar o que está plausível e errado, não o que
 está quebrado.
 
+## As duas fontes não concordam sobre units
+
+Descoberto ao emendar o histórico perdido na troca de código. Comparando o
+mesmo pregão nas duas fontes:
+
+| Ativo | Tipo | Pior diferença medida |
+|---|---|---|
+| AURE3 | ação | **0%**, bate ao centavo em 43 pregões |
+| NATU3 | ação | **0%**, bate ao centavo em 43 pregões |
+| TAEE11 | unit | 0,31% |
+| IGTI11 | unit | 1,02% em 2023, e **2,80%** no período da troca |
+
+Em ação, as duas fontes dão exatamente o mesmo número. Em unit, que é
+instrumento composto, elas divergem em pequenas quantidades e **nos dois
+sentidos**, o que descarta conversão de quantidade (conversão é fator fixo, numa
+direção só) e aponta para formas diferentes de precificar o papel composto.
+
+Consequências práticas:
+
+1. **O IGTI11 não foi emendado de propósito.** Emendar criaria uma série com
+   uma costura onde o preço muda de fonte, e 1.233 candles (5 anos) já bastam
+   para média de 200, IFR e ATR. O conserto certo é a migração completa de
+   provedor, quando a série inteira vier de uma fonte só.
+
+2. **Na migração de provedor, o preço das units vai mudar um pouco.** São 6 no
+   catálogo: BPAC11, ENGI11, IGTI11, KLBN11, SANB11 e TAEE11. Não é defeito, é
+   a fonte nova medindo diferente, mas precisa ser esperado em vez de descoberto
+   como susto.
+
+3. **A tolerância de 0,5% da conferência está bem calibrada.** Passou nas ações
+   com folga total, passaria no TAEE11, e pegou o IGTI11. Não foi escolhida com
+   esse conhecimento, mas o teste a validou.
+
 ## Pendências conhecidas
 
 - Emendar o histórico de AURE3, IGTI11 e NATU3 no dia da troca por provedor
