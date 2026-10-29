@@ -8,7 +8,8 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "db:migrate": "wrangler d1 migrations apply gaiatrader-db --remote",
-    "db:migrate:local": "wrangler d1 migrations apply gaiatrader-db --local"
+    "db:migrate:local": "wrangler d1 migrations apply gaiatrader-db --local",
+    "test": "node testes/ajuste.test.mjs && node testes/provedor.test.mjs"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"

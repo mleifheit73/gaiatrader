@@ -57,10 +57,27 @@ const COLUNAS = 10;
 const LINHAS_POR_COMANDO = 9;     // 9 x 10 colunas = 90 parametros, sob o limite de 100
 const COMANDOS_POR_VIAGEM = 150;  // 1.350 candles por ida ao banco
 
+/*
+ * ULTIMA LINHA DE DEFESA, NO PROPRIO BANCO.
+ *
+ * O WHERE no fim da clausula de conflito impede que um candle EM FORMACAO
+ * substitua um candle JA FECHADO. Um candle fechado e fato consumado: nenhuma
+ * leitura posterior sabe mais sobre aquele pregao do que ele.
+ *
+ * Sem esta linha, qualquer defeito no provedor que produza uma barra parcial
+ * sobre uma data antiga apaga dado bom em silencio, que foi exatamente o que
+ * aconteceu com o candle de 28/10/2026 do PETR4. As protecoes no provedor
+ * resolvem a causa conhecida; esta resolve a classe inteira, inclusive as
+ * causas que ainda nao conhecemos.
+ *
+ * Barra parcial continua podendo atualizar barra parcial, que e o caso normal
+ * de varias leituras ao longo do mesmo pregao.
+ */
 const SUFIXO_CONFLITO = `ON CONFLICT(ticker, d) DO UPDATE SET
    o = excluded.o, h = excluded.h, l = excluded.l, c = excluded.c,
    v = excluded.v, partial = excluded.partial,
-   src = excluded.src, updated_at = excluded.updated_at`;
+   src = excluded.src, updated_at = excluded.updated_at
+ WHERE excluded.partial = 0 OR daily_bars.partial = 1`;
 
 function montarInsert(n) {
   const tupla = "(" + new Array(COLUNAS).fill("?").join(",") + ")";

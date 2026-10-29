@@ -139,18 +139,23 @@ export const yahoo = {
       const v = q.volume?.[i] || 0;
       const d = tradingDate(t, off);
       let partial = 0;
+      let reconstruida = false;
 
       if (i === last) {
         // O pregao em andamento as vezes vem so com o fechamento. Reconstruimos
         // o que der com os extremos do dia que o proprio Yahoo informa no
         // cabecalho.
-        if (!(c > 0) && marketPrice > 0) c = marketPrice;
+        if (!(c > 0) && marketPrice > 0) {
+          c = marketPrice;
+          reconstruida = true;
+        }
         if (c > 0 && [o, h, l].some((x) => x == null || !(x > 0))) {
           const dh = meta.regularMarketDayHigh, dl = meta.regularMarketDayLow;
           o = c;
           h = Math.max(c, dh > 0 ? dh : c);
           l = Math.min(c, dl > 0 ? dl : c);
           partial = 1;
+          reconstruida = true;
         }
 
         // Regra principal: o relogio do mercado manda, mesmo que a barra venha
@@ -165,6 +170,20 @@ export const yahoo = {
       }
 
       if ([o, h, l, c].some((x) => x == null || !(x > 0))) return;
+
+      // SEM NEGOCIO NAO EXISTE CANDLE.
+      //
+      // Com o mercado fechado, o Yahoo devolve um registro do pregao seguinte
+      // ainda sem nenhum negocio. O codigo acima o preenche com o ultimo preco
+      // negociado, o que produz uma barra de volume zero e amplitude zero: nao
+      // e um candle, e o eco do ultimo preco.
+      //
+      // Deixar essa barra passar custou dado de verdade. Na recarga do PETR4 em
+      // 28/10/2026 ela caiu sobre o candle do dia e trocou
+      // abertura 53,17 / maxima 53,21 / minima 52,22 / volume 56.654.300
+      // por 52,51 em todos os campos e volume zero. O fechamento sobreviveu por
+      // coincidencia, o resto virou pó.
+      if (reconstruida && !(v > 0)) return;
 
       // INVARIANTE DA BARRA: a maxima nunca e menor que a abertura ou o
       // fechamento, e a minima nunca e maior. Se negociou naquele preco, o
@@ -193,9 +212,31 @@ export const yahoo = {
       });
     });
 
-    // O Yahoo as vezes repete a data do periodo corrente. A ultima leitura vence.
+    /*
+     * DATA REPETIDA: FICA A BARRA QUE CARREGA MAIS INFORMACAO, NAO A ULTIMA.
+     *
+     * A versao anterior desta funcao dizia "a ultima leitura vence", o que
+     * parece razoavel e esta errado. Fora do horario de pregao o Yahoo devolve
+     * um registro do periodo seguinte que cai na MESMA data do ultimo pregao, e
+     * esse registro vem vazio. Sendo o ultimo, ele vencia, e apagava o candle
+     * real do dia.
+     *
+     * A pergunta certa nao e qual leitura chegou depois, e qual leitura sabe
+     * mais sobre aquele pregao.
+     */
+    const sintetica = (x) => !(x.v > 0) && x.o === x.c && x.h === x.l;
+
+    const melhor = (atual, nova) => {
+      if (!atual) return nova;
+      // Barra fechada nunca cede lugar a barra em formacao.
+      if (atual.partial === 0 && nova.partial === 1) return atual;
+      // Eco do ultimo preco nao substitui pregao de verdade.
+      if (sintetica(nova) && !sintetica(atual)) return atual;
+      return nova;
+    };
+
     const porData = new Map();
-    for (const b of bars) porData.set(b.d, b);
+    for (const b of bars) porData.set(b.d, melhor(porData.get(b.d), b));
 
     return {
       name: meta.shortName || meta.longName || null,
