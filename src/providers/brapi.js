@@ -131,6 +131,9 @@ export const brapi = {
     const token = opts.token;
     if (!token) throw new Error("brapi: BRAPI_TOKEN nao configurado no servidor");
 
+    const de0 = opts.de || "(relativo)";
+    const ate0 = opts.ate || opts.range || "1y";
+
     const pedidos = opts.de && opts.ate
       ? janelas(opts.de, opts.ate)
       : [null];                     // periodo relativo: uma chamada so
@@ -139,6 +142,20 @@ export const brapi = {
     let canonico = ticker;
     let renomeado = false;
     let requisicoes = 0;
+
+    /*
+     * DIAGNOSTICO POR JANELA.
+     *
+     * A primeira versao pulava a janela que devolvia 404 em silencio, com a
+     * justificativa de que periodo anterior a existencia do papel e situacao
+     * normal. A justificativa esta certa e a consequencia estava errada: quando
+     * TODAS as janelas falhavam, o que sobrava era "nenhuma barra aproveitavel",
+     * uma mensagem que nao diz absolutamente nada sobre a causa.
+     *
+     * Tolerancia a erro sem contabilidade de erro nao e robustez, e cegueira.
+     * Agora cada janela deixa rastro, e o relatorio sai junto da falha.
+     */
+    const diag = { ok: 0, vazias: 0, por_status: {}, primeira_resposta: null };
 
     for (const janela of pedidos) {
       const q = new URLSearchParams({ symbols: ticker, interval: "1d", sortOrder: "asc" });
@@ -160,20 +177,43 @@ export const brapi = {
 
       requisicoes++;
 
+      diag.por_status[res.status] = (diag.por_status[res.status] || 0) + 1;
+
       if (!res.ok) {
         // Janela sem dado nenhum (antes do papel existir, por exemplo) nao e
         // motivo para derrubar a busca inteira: pulamos e seguimos. Qualquer
         // outro codigo e problema de verdade e precisa interromper, com o
         // status anexado para a camada de protecao poder entrar em recuo.
-        if (res.status === 404) continue;
-        const err = new Error(`brapi: HTTP ${res.status} em ${ticker}`);
+        if (res.status === 404) {
+          // Guarda o corpo da PRIMEIRA falha para o relatorio. O segredo vai no
+          // cabecalho, nunca no corpo, entao isto nao vaza token.
+          if (!diag.primeira_resposta) {
+            diag.primeira_resposta = (await res.text().catch(() => "")).slice(0, 400);
+          }
+          continue;
+        }
+        const corpo = (await res.text().catch(() => "")).slice(0, 300);
+        const err = new Error(`brapi: HTTP ${res.status} em ${ticker}: ${corpo}`);
         err.status = res.status;
         throw err;
       }
 
-      const json = await res.json();
+      const bruto = await res.text();
+      if (!diag.primeira_resposta) diag.primeira_resposta = bruto.slice(0, 400);
+
+      let json;
+      try {
+        json = JSON.parse(bruto);
+      } catch {
+        throw new Error(`brapi: ${ticker}: resposta nao e JSON: ${bruto.slice(0, 200)}`);
+      }
+
       const r = json?.results?.[0];
-      if (!r) continue;
+      if (!r) {
+        diag.vazias++;
+        continue;
+      }
+      diag.ok++;
 
       if (r.symbol) canonico = r.symbol;
       if (r.changed) renomeado = true;
@@ -181,7 +221,18 @@ export const brapi = {
       bars.push(...lerBarras(r));
     }
 
-    if (!bars.length) throw new Error(`brapi: ${ticker}: nenhuma barra aproveitavel`);
+    if (!bars.length) {
+      // Mensagem que diz O QUE aconteceu, nao apenas que nada veio.
+      const statuses = Object.entries(diag.por_status)
+        .map(([s, n]) => `${n}x HTTP ${s}`)
+        .join(", ") || "nenhuma resposta";
+      throw new Error(
+        `brapi: ${ticker}: nenhuma barra em ${requisicoes} janela(s) ` +
+          `(${de0}..${ate0}). Respostas: ${statuses}. ` +
+          `Janelas com resultado: ${diag.ok}, sem resultado: ${diag.vazias}. ` +
+          `Primeira resposta: ${diag.primeira_resposta || "(vazia)"}`
+      );
+    }
 
     // Data repetida entre janelas vizinhas fica com a ultima leitura, que e do
     // mesmo pregao fechado de qualquer forma.
@@ -197,6 +248,7 @@ export const brapi = {
       // Quantas requisicoes foram gastas de verdade, porque o fatiamento torna
       // isso invisivel para quem chama e consumo invisivel nao se controla.
       requisicoes,
+      janelas: diag,
       currency: "BRL",
       bars: [...porData.values()].sort((a, b) => (a.d < b.d ? -1 : 1)),
       // Proventos exigem plano pago. Ver o comentario no topo do arquivo.

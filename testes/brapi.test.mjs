@@ -10,18 +10,23 @@ function ok(nome, cond, extra = "") {
 const epochDe = (dia) => Math.floor(Date.parse(dia + "T03:00:00Z") / 1000);
 
 function resposta(dias, symbol = "AURE3", changed = false) {
-  return {
-    ok: true, status: 200,
-    json: async () => ({ results: [{
-      symbol, changed,
-      historicalDataPrice: dias.map((d, i) => ({
-        date: epochDe(d),
-        open: 10 + i, high: 11 + i, low: 9 + i, close: 10.5 + i,
-        volume: 1000 + i, adjustedClose: 8 + i,
-      })),
-    }] }),
-  };
+  const corpo = JSON.stringify({ results: [{
+    symbol, changed,
+    historicalDataPrice: dias.map((d, i) => ({
+      date: epochDe(d),
+      open: 10 + i, high: 11 + i, low: 9 + i, close: 10.5 + i,
+      volume: 1000 + i, adjustedClose: 8 + i,
+    })),
+  }] });
+  return { ok: true, status: 200, text: async () => corpo, json: async () => JSON.parse(corpo) };
 }
+
+/** Resposta de erro, com corpo, como a BRAPI devolve de verdade. */
+const erroHttp = (status, corpo = "") => ({
+  ok: false, status,
+  text: async () => corpo,
+  json: async () => { try { return JSON.parse(corpo); } catch { return {}; } },
+});
 
 // ---------------------------------------------------------------------------
 // 1. FATIAMENTO: periodo longo vira varias janelas de 90 dias
@@ -68,7 +73,7 @@ ok("series em ordem crescente", r2.bars[0].d < r2.bars[1].d);
 let n = 0;
 globalThis.fetch = async (url) => {
   n++;
-  if (n <= 2) return { ok: false, status: 404 };
+  if (n <= 2) return erroHttp(404, '{"error":"sem dados"}');
   return resposta([new URL(url).searchParams.get("startDate")]);
 };
 const r3 = await brapi.daily("AURE3", "b3", { de: "2021-01-01", ate: "2021-12-31", token: "x" });
@@ -77,7 +82,7 @@ ok("janela 404 e pulada, nao fatal", r3.bars.length > 0, `${r3.bars.length} barr
 // ---------------------------------------------------------------------------
 // 4. BLOQUEIO DE VERDADE interrompe, com o status anexado para o recuo automatico
 // ---------------------------------------------------------------------------
-globalThis.fetch = async () => ({ ok: false, status: 429 });
+globalThis.fetch = async () => erroHttp(429, '{"error":"rate limit"}');
 let erro = null;
 try {
   await brapi.daily("AURE3", "b3", { de: "2021-01-01", ate: "2021-03-01", token: "x" });
@@ -96,6 +101,22 @@ ok("invariante da barra respeitada", r5.bars.every((b) => b.h >= b.o && b.h >= b
 ok("historico vem sempre como definitivo", r5.bars.every((b) => b.partial === 0));
 ok("eventos vem vazios (plano gratuito nao serve proventos)",
    r5.eventos.dividendos.length === 0 && r5.eventos.desdobramentos.length === 0);
+
+// ---------------------------------------------------------------------------
+// 6. TODAS AS JANELAS FALHANDO: a mensagem tem que dizer O QUE aconteceu
+// A primeira versao pulava 404 em silencio e, quando tudo falhava, sobrava
+// "nenhuma barra aproveitavel", que nao diz nada sobre a causa.
+// ---------------------------------------------------------------------------
+globalThis.fetch = async () => erroHttp(404, '{"error":"Ativo nao encontrado"}');
+let tudoFalhou = null;
+try {
+  await brapi.daily("AURE3", "b3", { de: "2016-10-01", ate: "2016-12-01", token: "x" });
+} catch (e) { tudoFalhou = e; }
+const msg = tudoFalhou?.message || "";
+ok("tudo falhando: informa quantas janelas foram tentadas", /janela/.test(msg), msg.slice(0, 80));
+ok("tudo falhando: informa o status recebido", /HTTP 404/.test(msg));
+ok("tudo falhando: informa o periodo pedido", /2016-10-01/.test(msg));
+ok("tudo falhando: mostra a resposta do provedor", /Ativo nao encontrado/.test(msg));
 
 let semToken = null;
 try { await brapi.daily("AURE3", "b3", { range: "1y" }); } catch (e) { semToken = e; }
