@@ -9,10 +9,16 @@
  */
 
 import { yahoo } from "./yahoo.js";
+import { brapi } from "./brapi.js";
 import { mock } from "./mock.js";
 
 const PROVEDORES = {
   yahoo,
+  // Provedor brasileiro comercial. Entrou para resolver historico de codigo
+  // aposentado da B3, que o Yahoo nao serve, e e o caminho da migracao
+  // obrigatoria antes da primeira cobranca, porque o Yahoo nao autoriza uso
+  // comercial. No dia da troca, muda o PADRAO abaixo.
+  brapi,
   mock, // deterministico, so para teste; nunca como padrao
 };
 

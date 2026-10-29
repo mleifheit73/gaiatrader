@@ -238,6 +238,7 @@ export default {
             banco_conectado: !!env.DB,
             arquivos_conectados: !!env.ASSETS,
             admin_token_configurado: !!env.ADMIN_TOKEN,
+            brapi_token_configurado: !!env.BRAPI_TOKEN,
             provedor: env.DATA_PROVIDER || "(padrao)",
           },
         });
@@ -381,17 +382,19 @@ export default {
         if (check !== "ok") return erro("nao autorizado", 401);
 
         const ticker = (url.searchParams.get("ticker") || "").toUpperCase().trim();
-        const predecessor = (url.searchParams.get("predecessor") || "").toUpperCase().trim();
+        const predecessor = (url.searchParams.get("predecessor") || "").toUpperCase().trim() || null;
         if (!/^[A-Z0-9^=.-]{1,20}$/.test(ticker)) return erro("ticker invalido");
-        if (!/^[A-Z0-9^=.-]{1,20}$/.test(predecessor)) return erro("predecessor invalido");
+        if (predecessor && !/^[A-Z0-9^=.-]{1,20}$/.test(predecessor)) return erro("predecessor invalido");
 
         try {
           return json(
             await costurar(env.DB, env, ticker, {
+              // O codigo antigo vai junto so para o relatorio: a BRAPI resolve
+              // o codigo sozinha e serve a serie inteira sob o codigo atual,
+              // entao nao precisamos pedir o simbolo aposentado.
               predecessor,
               ate: url.searchParams.get("ate") || "",
-              range: url.searchParams.get("range") || "10y",
-              razao: url.searchParams.get("razao") || undefined,
+              de: url.searchParams.get("de") || undefined,
               simular: url.searchParams.get("aplicar") !== "1",
             })
           );
