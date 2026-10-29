@@ -477,8 +477,49 @@ export default {
       // Tudo que nao e API vai para os arquivos estaticos.
       return env.ASSETS.fetch(request);
     } catch (e) {
-      // Nunca devolver detalhe interno ao cliente. O detalhe vai para o log.
       console.error("erro nao tratado:", e?.stack || e);
+
+      /*
+       * CONDICAO OPERACIONAL CONHECIDA MERECE MENSAGEM PROPRIA.
+       *
+       * "Erro interno" e a resposta certa para defeito nosso, porque detalhe de
+       * implementacao nao deve vazar. Mas o limite diario do banco nao e
+       * defeito nem segredo: e uma condicao prevista, com hora marcada para
+       * passar, e esconde-la atras de "erro interno" custou tempo de
+       * diagnostico duas vezes em dois dias.
+       *
+       * O plano gratuito do D1 permite 5 milhoes de linhas lidas por dia e
+       * recusa consultas ao estourar, voltando a meia-noite UTC, que e 21h de
+       * Brasilia.
+       */
+      const msg = String(e?.message || e);
+
+      if (/row read limit/i.test(msg)) {
+        return json(
+          {
+            erro: "O limite diario de leitura do banco foi atingido.",
+            detalhe:
+              "O plano gratuito permite 5 milhoes de linhas lidas por dia. " +
+              "O limite volta a zerar a meia-noite UTC, que e 21h de Brasilia.",
+            tipo: "limite_diario_leitura",
+          },
+          503,
+          { "retry-after": "3600" }
+        );
+      }
+
+      if (/row write limit/i.test(msg)) {
+        return json(
+          {
+            erro: "O limite diario de gravacao do banco foi atingido.",
+            detalhe: "O limite volta a zerar a meia-noite UTC, que e 21h de Brasilia.",
+            tipo: "limite_diario_gravacao",
+          },
+          503,
+          { "retry-after": "3600" }
+        );
+      }
+
       return erro("erro interno", 500);
     }
   },
