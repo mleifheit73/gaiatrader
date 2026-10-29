@@ -219,6 +219,43 @@ quebrada. Todos produziriam números errados com aparência perfeita. Em sistema
 dados, a verificação tem que procurar o que está plausível e errado, não o que
 está quebrado.
 
+## 929 barras inventadas, em 64 dos 76 ativos da B3
+
+O achado mais sério da auditoria, e ele estava escondido desde a carga inicial.
+
+O provedor devolve, em alguns dias, uma barra com **volume zero e amplitude
+zero**: abertura igual à máxima, igual à mínima, igual ao fechamento. Não é
+candle, é o eco do último preço conhecido, repetido para preencher o calendário.
+
+A varredura da base encontrou 929 delas. Dois padrões distintos:
+
+**Dias sem pregão.** Em 25/01/2018, aniversário de São Paulo, 60 ativos tinham
+candle e **nenhum** tinha um único negócio. O dia inteiro era inventado. O mesmo
+em 29/05/2017, com 59 de 62. Para efeito de comparação, num dia normal a conta é
+62 candles e 61 com negócio, e no crash de 26/10/2026 são 76 e 76.
+
+Isso significa que a base continha **dias de pregão que não existiram**, e cada
+um deles entrava na janela de toda média de N períodos, deslocando o cálculo.
+
+**Preenchimento prolongado.** O NATU3 tinha quatro dessas barras seguidas, todas
+a R$ 36,86, entre 26/06 e 01/07/2025, enquanto o papel negociava perto de R$ 10.
+Sozinhas, criavam um salto de +253% seguido de uma queda de -72% que nunca
+aconteceram. Conferido contra o Investing.com: nos dias em questão o preço real
+era 11,05 e 10,80.
+
+### Por que isso passou despercebido
+
+Nenhuma dessas barras viola qualquer invariante. O preço é positivo, a máxima não
+é menor que a mínima, a data é válida, o volume não é negativo. **Passa em todas
+as verificações de integridade e está completamente errada.** É o mesmo padrão
+dos outros defeitos desta auditoria: o erro não se anuncia, só produz número
+plausível e falso.
+
+A correção no provedor (não emitir barra reconstruída sem negócio) impede que
+novas entrem. A limpeza removeu as 929 que já estavam. Depois dela, restaram
+apenas 4 buracos em toda a base, três deles pequenos e preenchidos a partir do
+segundo provedor, e um conhecido (AVAX, anterior ao lançamento da rede).
+
 ## As duas fontes não concordam sobre units
 
 Descoberto ao emendar o histórico perdido na troca de código. Comparando o
