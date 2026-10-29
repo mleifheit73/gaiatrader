@@ -85,10 +85,33 @@ function janelas(de, ate) {
   return saida;
 }
 
+/*
+ * ONDE A SERIE DE PRECOS MORA NA RESPOSTA.
+ *
+ * A API crua aninha a serie dentro de um objeto "data":
+ *   results[0].data.historicalDataPrice
+ *
+ * O conector MCP da BRAPI achata isso e entrega no primeiro nivel:
+ *   results[0].historicalDataPrice
+ *
+ * Eu escrevi este provedor olhando a resposta do conector e tratei os dois
+ * contratos como se fossem um so. As 23 janelas voltaram com HTTP 200 e com
+ * dados, e o provedor devolveu zero barras, porque procurava no lugar errado.
+ *
+ * Licao que fica: formato visto atraves de uma ferramenta nao e o formato da
+ * API. A ferramenta pode reorganizar, e quase sempre reorganiza.
+ *
+ * Aceitamos os dois lugares de proposito, para que uma mudanca de qualquer lado
+ * nao derrube a leitura.
+ */
+function serieDaResposta(r) {
+  return r?.data?.historicalDataPrice || r?.historicalDataPrice || [];
+}
+
 /** Converte a resposta de uma janela em barras do nosso formato. */
 function lerBarras(r) {
   const bars = [];
-  for (const p of r.historicalDataPrice || []) {
+  for (const p of serieDaResposta(r)) {
     const o = Number(p.open), h = Number(p.high), l = Number(p.low), c = Number(p.close);
     const v = Number(p.volume) || 0;
 

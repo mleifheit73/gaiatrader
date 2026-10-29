@@ -10,13 +10,15 @@ function ok(nome, cond, extra = "") {
 const epochDe = (dia) => Math.floor(Date.parse(dia + "T03:00:00Z") / 1000);
 
 function resposta(dias, symbol = "AURE3", changed = false) {
+  const serie = dias.map((d, i) => ({
+    date: epochDe(d),
+    open: 10 + i, high: 11 + i, low: 9 + i, close: 10.5 + i,
+    volume: 1000 + i, adjustedClose: 8 + i,
+  }));
+  // Formato REAL da API crua: a serie fica aninhada dentro de "data".
   const corpo = JSON.stringify({ results: [{
-    symbol, changed,
-    historicalDataPrice: dias.map((d, i) => ({
-      date: epochDe(d),
-      open: 10 + i, high: 11 + i, low: 9 + i, close: 10.5 + i,
-      volume: 1000 + i, adjustedClose: 8 + i,
-    })),
+    requestedSymbol: symbol, symbol, changed,
+    data: { usedInterval: "1d", usedRange: "custom", historicalDataPrice: serie },
   }] });
   return { ok: true, status: 200, text: async () => corpo, json: async () => JSON.parse(corpo) };
 }
@@ -117,6 +119,30 @@ ok("tudo falhando: informa quantas janelas foram tentadas", /janela/.test(msg), 
 ok("tudo falhando: informa o status recebido", /HTTP 404/.test(msg));
 ok("tudo falhando: informa o periodo pedido", /2016-10-01/.test(msg));
 ok("tudo falhando: mostra a resposta do provedor", /Ativo nao encontrado/.test(msg));
+
+// ---------------------------------------------------------------------------
+// 7. OS DOIS FORMATOS DE RESPOSTA
+// A API crua aninha a serie dentro de "data". O conector MCP achata no primeiro
+// nivel. Escrever contra um e receber o outro devolveu zero barras com HTTP 200
+// em 23 janelas seguidas, sem erro nenhum. Os dois precisam funcionar.
+// ---------------------------------------------------------------------------
+const serieFalsa = [{ date: epochDe("2021-03-01"), open: 10, high: 11, low: 9, close: 10.5, volume: 100, adjustedClose: 8 }];
+
+globalThis.fetch = async () => {
+  const corpo = JSON.stringify({ results: [{ symbol: "AURE3", changed: false,
+    data: { historicalDataPrice: serieFalsa } }] });
+  return { ok: true, status: 200, text: async () => corpo };
+};
+const aninhado = await brapi.daily("AURE3", "b3", { de: "2021-03-01", ate: "2021-03-05", token: "x" });
+ok("formato real da API (serie dentro de data) e lido", aninhado.bars.length === 1);
+
+globalThis.fetch = async () => {
+  const corpo = JSON.stringify({ results: [{ symbol: "AURE3", changed: false,
+    historicalDataPrice: serieFalsa }] });
+  return { ok: true, status: 200, text: async () => corpo };
+};
+const achatado = await brapi.daily("AURE3", "b3", { de: "2021-03-01", ate: "2021-03-05", token: "x" });
+ok("formato achatado do conector tambem e lido", achatado.bars.length === 1);
 
 let semToken = null;
 try { await brapi.daily("AURE3", "b3", { range: "1y" }); } catch (e) { semToken = e; }
