@@ -264,6 +264,13 @@ function render(d) {
               </td>
             </tr>`).join("")}
           <tr>
+            <td><b>Métricas</b></td>
+            <td>Apura os indicadores de um lote de ativos e guarda, para a tela de
+                rastreamento ler pronto. A varredura noturna já faz isso sozinha;
+                este botão serve para conferir antes da hora.</td>
+            <td><button class="btn" id="apurar">Apurar lote</button></td>
+          </tr>
+          <tr>
             <td><b>Outro ativo</b></td>
             <td>
               <input id="rec-ticker" placeholder="TICKER" style="width:90px;font:inherit;padding:4px 6px">
@@ -332,6 +339,9 @@ async function chamarReparo(rota, parametros, botao) {
                  `${corpo.conferencia?.pregoes_em_comum} pregões. Pode aplicar.`;
     else if (corpo?.motivo) manchete = "RECUSADO: " + corpo.motivo;
     else if (corpo?.barras !== undefined) manchete = `RECARREGADO: ${corpo.barras} candles.`;
+    else if (corpo?.linhas !== undefined)
+      manchete = `APURADO: ${corpo.ok} ativo(s), ${corpo.linhas} leituras, ` +
+                 `${corpo.falhas} falha(s). Faltam ${corpo.faltam_apurar}.`;
     else manchete = "HTTP " + r.status;
 
     mostrarSaida(manchete + "\n\n" + JSON.stringify(corpo, null, 2));
@@ -353,6 +363,12 @@ function ligarReparos() {
       if (res.ok) carregar();
     };
   });
+
+  const apu = $("apurar");
+  if (apu) apu.onclick = async () => {
+    const res = await chamarReparo("/api/admin/apurar", { lote: 10 }, apu);
+    if (res.ok) carregar();
+  };
 
   const livre = $("rec-livre");
   if (livre) livre.onclick = async () => {
