@@ -15,12 +15,25 @@ database_id = "d0143976-772a-4ca7-92fa-c3fb227effb6"
 
 # UMA varredura por dia, e so.
 #
-# Das 21h30 as 22h25 UTC, que e das 18h30 as 19h25 de Brasilia. O Brasil nao tem
+# Das 00h30 as 01h25 UTC, que e das 21h30 as 22h25 de Brasilia. O Brasil nao tem
 # horario de verao desde 2019, entao o deslocamento e fixo em UTC-3.
 #
-# Por que 18h30 e nao logo apos as 17h: a B3 fecha o pregao regular as 17h, mas
-# o after-market vai ate as 18h. Varrer antes disso pegaria um fechamento que
-# ainda pode mudar. As 18h30 o candle do dia e definitivo.
+# POR QUE 21H30 DE BRASILIA, E NAO 18H30
+#
+# A primeira versao rodava as 18h30, logo apos o after-market fechar, o que
+# parecia o horario obvio. O problema nao e o pregao, e o orcamento: o limite
+# diario de leitura do D1 zera a meia-noite UTC, que e 21h de Brasilia.
+#
+# As 18h30 a varredura competia com tudo que o dia inteiro ja havia consumido, e
+# era a primeira a sofrer quando algo gastasse demais. Falhou duas vezes
+# seguidas por isso, sem conseguir nem ler o banco para saber o que carregar.
+#
+# As 21h30 ela roda nos primeiros minutos de um orcamento zerado, com os
+# 5 milhoes de linhas inteiros a disposicao. O candle continua igualmente
+# definitivo, porque o pregao regular fecha as 17h e o after-market as 18h.
+#
+# A licao geral: tarefa critica que roda em plano com cota diaria deve rodar
+# LOGO APOS a virada da cota, nunca perto do fim dela.
 #
 # Sao 12 execucoes de 5 em 5 minutos, cada uma com um lote dos ativos mais
 # desatualizados. Bastam 5 para cobrir os 96; as demais nao fazem nada porque
@@ -33,7 +46,7 @@ database_id = "d0143976-772a-4ca7-92fa-c3fb227effb6"
 #
 # Todos os dias, nao so em dia util, porque cripto negocia no fim de semana.
 [triggers]
-crons = ["30,35,40,45,50,55 21 * * *", "0,5,10,15,20,25 22 * * *"]
+crons = ["30,35,40,45,50,55 0 * * *", "0,5,10,15,20,25 1 * * *"]
 
 [vars]
 # Provedor de cotacoes em uso. Trocar aqui quando houver licenca comercial.
