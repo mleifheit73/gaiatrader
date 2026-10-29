@@ -192,6 +192,23 @@ Três ativos do catálogo perderam histórico exatamente na data da troca, e a d
 IGTI11 começa em 2021-11-22 (IGTA3 → IGTI11 na mesma data) e NATU3 tem um buraco
 de 2.017 dias (NTCO3 → NATU3 em 2025-07-02). Passavam por IPO recente.
 
+O conserto foi tentado e **não é possível com o provedor atual**: CESP6, IGTA3 e
+NTCO3 devolvem HTTP 404. O padrão dos dados explica por quê. O NATU3 tem
+histórico de 2016 a 2019 e de 2025 em diante, com o buraco no meio, enquanto
+AURE3 e IGTI11 não têm absolutamente nada antes da troca. Ou seja, o Yahoo indexa
+pelo código de negociação, não pela empresa, e descarta o código aposentado.
+
+Os três ficam registrados com `predecessor` e `predecessor_ate` preenchidos, para
+que o sistema saiba da troca mesmo sem conseguir preencher o buraco, e para que a
+emenda seja feita de uma vez no dia em que trocarmos por um provedor licenciado,
+o que é obrigatório antes da primeira cobrança de qualquer forma.
+
+O impacto prático é pequeno: AURE3 fica com 4,5 anos e IGTI11 com 5, que
+sustentam média de 200, IFR e ATR sem problema. Só o NATU3 fica de fato limitado,
+com 16 meses de trecho contínuo. E nada disso produz número errado, porque
+`trechoContinuo` usa apenas o pedaço sem buraco e devolve "sem base" quando o
+indicador pedido não cabe.
+
 **4) Série não ajustada por proventos.** O PETR4 fechou 58,68 num dia e abriu
 51,20 no seguinte, queda de 12,7% confirmada em três fontes. Não é defeito de
 carga, é provento, e abre um buraco artificial que atravessa qualquer média
@@ -204,6 +221,9 @@ está quebrado.
 
 ## Pendências conhecidas
 
+- Emendar o histórico de AURE3, IGTI11 e NATU3 no dia da troca por provedor
+  licenciado. O `predecessor` de cada um já está registrado no banco, e a rota
+  `/api/admin/costurar` já existe e já simula antes de gravar
 - Verificar BPAC11 (1º candle 2017-02-24) e VBBR3 (2018-03-14): podem ser troca
   de código não coberta pela tabela de renomeações, ou início real de negociação
 - Conferir a série ajustada que calculamos contra a do provedor, usando o campo
