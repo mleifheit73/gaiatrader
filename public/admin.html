@@ -61,6 +61,7 @@
   .entrada{padding:40px 0;max-width:460px}
   .entrada p{color:var(--muted);font-size:13.5px}
   .rodape{margin-top:26px;color:var(--muted);font-size:12.5px;line-height:1.7}
+  .nota{color:var(--muted);font-size:12.5px;line-height:1.6;margin:0 0 14px;max-width:70ch}
 </style>
 </head>
 <body>
@@ -219,6 +220,64 @@ function render(d) {
         </table>
       </section>` : ""}
 
+    ${(d.historico_raso || []).length ? `
+      <section class="painel">
+        <h2>Histórico raso</h2>
+        <p class="nota">Ativos carregados com menos histórico do que os 10 anos desejados.
+          Foi o defeito que manteve o PETR4 em 2 anos sem ninguém notar.</p>
+        <table>
+          <thead><tr><th>Ativo</th><th>Período carregado</th><th>1º candle</th></tr></thead>
+          <tbody>${d.historico_raso.map((a) => `
+            <tr><td>${esc(a.ticker)}</td><td>${esc(a.range_carregado || "não registrado")}</td>
+                <td>${esc(a.primeiro_candle || "sem candle")}</td></tr>`).join("")}</tbody>
+        </table>
+      </section>` : ""}
+
+    <section class="painel">
+      <h2>Reparos</h2>
+      <p class="nota">Cada reparo é uma ação pontual. A costura de código antigo
+        <b>simula primeiro</b>: ela confere se o último preço do código antigo bate com o
+        primeiro do código novo. Se não bater, houve conversão de quantidade, e emendar
+        sem corrigir a razão criaria um degrau falso que todo indicador leria como
+        rompimento. Por isso o botão de aplicar só liga depois de uma simulação.</p>
+
+      <table>
+        <thead><tr><th>Reparo</th><th>O que faz</th><th>Ação</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><b>PETR4</b></td>
+            <td>Recarrega com 10 anos. Hoje tem 498 candles em vez de 2.491.</td>
+            <td><button class="btn" data-recarga="PETR4" data-range="10y">Recarregar</button></td>
+          </tr>
+          ${[
+            ["AURE3", "CESP6", "2022-03-28"],
+            ["IGTI11", "IGTA3", "2021-11-22"],
+            ["NATU3", "NTCO3", "2025-07-02"],
+          ].map(([t, pre, ate]) => `
+            <tr>
+              <td><b>${t}</b></td>
+              <td>Emenda o histórico de <b>${pre}</b>, anterior a ${ate}.
+                  Nunca sobrescreve candle existente.</td>
+              <td>
+                <button class="btn" data-costura="${t}" data-pre="${pre}" data-ate="${ate}" data-aplicar="0">Simular</button>
+                <button class="btn" data-costura="${t}" data-pre="${pre}" data-ate="${ate}" data-aplicar="1" disabled>Aplicar</button>
+              </td>
+            </tr>`).join("")}
+          <tr>
+            <td><b>Outro ativo</b></td>
+            <td>
+              <input id="rec-ticker" placeholder="TICKER" style="width:90px;font:inherit;padding:4px 6px">
+              <input id="rec-range" value="10y" style="width:60px;font:inherit;padding:4px 6px">
+            </td>
+            <td><button class="btn" id="rec-livre">Recarregar</button></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <pre id="saida-reparo" style="display:none;white-space:pre-wrap;font:12px var(--mono,monospace);
+        background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:10px;margin-top:12px"></pre>
+    </section>
+
     <p class="rodape">
       O teto de ${L.teto_hora} consultas por hora é imposto por nós, não pelo provedor.
       O número mais citado para o Yahoo é 360 por hora, mas não é oficial e não há garantia nenhuma.
@@ -233,6 +292,80 @@ function render(d) {
     await fetch("/api/admin/liberar", { method:"POST", headers:{ "x-admin-token": token() } });
     carregar();
   };
+
+  ligarReparos();
+}
+
+/*
+ * REPAROS
+ *
+ * Os botões ficam aqui, e não num comando de terminal, por um motivo de
+ * segurança: o segredo de administração já está neste navegador e não precisa
+ * sair dele nem passar por mais ninguém para que um reparo seja executado.
+ */
+function mostrarSaida(texto) {
+  const el = $("saida-reparo");
+  el.style.display = "block";
+  el.textContent = texto;
+}
+
+async function chamarReparo(rota, parametros, botao) {
+  const antes = botao.textContent;
+  botao.disabled = true;
+  botao.textContent = "...";
+  mostrarSaida("Executando " + rota + " " + new URLSearchParams(parametros).toString() + "\n");
+  try {
+    const r = await fetch(rota + "?" + new URLSearchParams(parametros).toString(), {
+      method: "POST",
+      headers: { "x-admin-token": token() },
+    });
+    const corpo = await r.json().catch(() => ({ erro: "resposta ilegível" }));
+    mostrarSaida("HTTP " + r.status + "\n\n" + JSON.stringify(corpo, null, 2));
+    return { ok: r.ok, corpo };
+  } catch (e) {
+    mostrarSaida("Falhou: " + (e?.message || e));
+    return { ok: false, corpo: null };
+  } finally {
+    botao.disabled = false;
+    botao.textContent = antes;
+  }
+}
+
+function ligarReparos() {
+  document.querySelectorAll("[data-recarga]").forEach((bt) => {
+    bt.onclick = async () => {
+      const res = await chamarReparo("/api/admin/recarregar",
+        { ticker: bt.dataset.recarga, range: bt.dataset.range }, bt);
+      if (res.ok) carregar();
+    };
+  });
+
+  const livre = $("rec-livre");
+  if (livre) livre.onclick = async () => {
+    const t = ($("rec-ticker").value || "").trim().toUpperCase();
+    const g = ($("rec-range").value || "10y").trim();
+    if (!t) return mostrarSaida("Informe o código do ativo.");
+    const res = await chamarReparo("/api/admin/recarregar", { ticker: t, range: g }, livre);
+    if (res.ok) carregar();
+  };
+
+  document.querySelectorAll("[data-costura]").forEach((bt) => {
+    bt.onclick = async () => {
+      const p = { ticker: bt.dataset.costura, predecessor: bt.dataset.pre, ate: bt.dataset.ate };
+      if (bt.dataset.aplicar === "1") p.aplicar = "1";
+      const res = await chamarReparo("/api/admin/costurar", p, bt);
+
+      // O botão de aplicar só liga depois de uma simulação que deu certo. Ver a
+      // nota na tela: emendar série com degrau de preço não dá erro, só estraga
+      // todo indicador em silêncio.
+      if (bt.dataset.aplicar === "0" && res.ok) {
+        const aplicar = document.querySelector(
+          `[data-costura="${bt.dataset.costura}"][data-aplicar="1"]`);
+        if (aplicar) aplicar.disabled = false;
+      }
+      if (bt.dataset.aplicar === "1" && res.ok) carregar();
+    };
+  });
 }
 
 const token = () => { try { return localStorage.getItem(K) || ""; } catch (e) { return ""; } };
