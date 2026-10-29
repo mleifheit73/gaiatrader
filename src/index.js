@@ -17,6 +17,7 @@ import {
 import { estado as estadoLimite, liberar, limparAntigos } from "./limites.js";
 import { ajustar, trechoContinuo, intervaloMaximo } from "./ajuste.js";
 import { costurar } from "./costura.js";
+import { agregar } from "./agregacao.js";
 
 const json = (data, status = 200, extra = {}) =>
   new Response(JSON.stringify(data, null, 2), {
@@ -70,6 +71,20 @@ async function rotaBarras(url, env, ctx) {
 
   const limite = Math.min(parseInt(url.searchParams.get("limite") || "500", 10) || 500, 5000);
 
+  /*
+   * TEMPO GRAFICO.
+   *
+   * O limite pedido vale para as barras DEVOLVIDAS, nao para as lidas. Quem
+   * pede 100 barras mensais quer 100 meses, nao 100 dias virando 5 meses.
+   * Entao lemos pregoes suficientes para formar o que foi pedido: cerca de 5
+   * por semana e 22 por mes, com folga.
+   */
+  const periodo = url.searchParams.get("periodo") || "dia";
+  if (!["dia", "semana", "mes"].includes(periodo)) return erro("periodo invalido");
+
+  const pregoesPorBarra = { dia: 1, semana: 5, mes: 22 }[periodo];
+  const limiteDiario = Math.min(limite * pregoesPorBarra + pregoesPorBarra * 2, 5000);
+
   const { results } = await env.DB.prepare(
     `SELECT d, o, h, l, c, v, partial
        FROM daily_bars
@@ -77,7 +92,7 @@ async function rotaBarras(url, env, ctx) {
       ORDER BY d DESC
       LIMIT ?`
   )
-    .bind(ticker, limite)
+    .bind(ticker, limiteDiario)
     .all();
 
   const ativo = await env.DB.prepare(
@@ -150,6 +165,22 @@ async function rotaBarras(url, env, ctx) {
     corte = t.cortado ? t.buraco : null;
   }
 
+  /*
+   * A AGREGACAO VEM POR ULTIMO, E A ORDEM NAO E NEGOCIAVEL.
+   *
+   * O ajuste por proventos aplica um fator por DATA, entao precisa dos pregoes
+   * individuais: agregar antes faria o fator de um dividendo cair sobre a
+   * semana inteira em vez de sobre os dias certos.
+   *
+   * O corte de trecho continuo tambem vem antes, porque e ele quem garante que
+   * a semana nao vai misturar pregoes dos dois lados de um buraco.
+   */
+  const pregoesLidos = bars.length;
+  if (periodo !== "dia") {
+    bars = agregar(bars, periodo);
+    if (bars.length > limite) bars = bars.slice(-limite);
+  }
+
   // ORDEM DOS CAMPOS: TODO O DIAGNOSTICO ANTES DO VETOR DE CANDLES.
   //
   // Nao e capricho. Com 2.491 candles a resposta passa de 300 KB, e qualquer
@@ -162,6 +193,8 @@ async function rotaBarras(url, env, ctx) {
     ticker,
     ativo: ativo || null,
     total: bars.length,
+    periodo,
+    pregoes_lidos: pregoesLidos,
     serie: querAjustado ? "ajustada" : "bruta",
     ajuste,
     // Quando preenchido, a serie tem um buraco e so o trecho posterior a ele foi
