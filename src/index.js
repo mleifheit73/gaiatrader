@@ -19,6 +19,7 @@ import { ajustar, trechoContinuo, intervaloMaximo } from "./ajuste.js";
 import { costurar } from "./costura.js";
 import { agregar } from "./agregacao.js";
 import { leituraAtual } from "./indicadores.js";
+import { apurarLote, rastrear, faltamApurar } from "./rastreamento.js";
 
 const json = (data, status = 200, extra = {}) =>
   new Response(JSON.stringify(data, null, 2), {
@@ -288,6 +289,28 @@ export default {
       // leem exatamente a mesma serie, com o mesmo ajuste e o mesmo corte de
       // trecho continuo. Duas leituras diferentes da mesma coisa seriam duas
       // fontes de verdade, e uma delas estaria errada em algum momento.
+      // Tela de rastreamento: le a tabela apurada, uma linha por ativo.
+      //
+      // Nao calcula nada aqui de proposito. Calcular ao vivo custaria cerca de
+      // 235 mil linhas por carregamento, e o plano gratuito permitiria 21
+      // acessos por dia. Lendo a apuracao, custa 96 linhas.
+      if (rota === "/api/rastreamento") {
+        const linhas = await rastrear(env.DB, {
+          periodo: url.searchParams.get("periodo") || "dia",
+          market: url.searchParams.get("mercado") || undefined,
+          liquidezMinima: url.searchParams.get("liquidez_minima") || undefined,
+        });
+
+        return json({
+          periodo: url.searchParams.get("periodo") || "dia",
+          total: linhas.length,
+          // Apuracao incompleta precisa aparecer: a tela mostraria menos ativos
+          // do que o catalogo e o usuario nao saberia por que.
+          faltam_apurar: await faltamApurar(env.DB),
+          ativos: linhas,
+        });
+      }
+
       if (rota === "/api/indicadores") {
         // Indicador calcula na serie AJUSTADA por proventos e no trecho
         // continuo, sempre. Nao e opcional: media longa atravessando provento
@@ -465,6 +488,17 @@ export default {
       }
 
       // Tira o sistema do recuo automatico antes da hora, se eu decidir que ja da.
+      // Dispara a apuracao de um lote manualmente, para nao depender do
+      // horario da varredura durante o desenvolvimento.
+      if (rota === "/api/admin/apurar" && request.method === "POST") {
+        const check = conferirAdmin(request, env);
+        if (check !== "ok") return erro("nao autorizado", check === "sem_segredo_no_servidor" ? 503 : 401);
+
+        const n = parseInt(url.searchParams.get("lote") || "10", 10);
+        const resumo = await apurarLote(env.DB, { lote: Number.isFinite(n) ? n : 10 });
+        return json({ ...resumo, faltam_apurar: await faltamApurar(env.DB) });
+      }
+
       if (rota === "/api/admin/liberar" && request.method === "POST") {
         const check = conferirAdmin(request, env);
         if (check !== "ok") return erro("nao autorizado", 401);
@@ -544,6 +578,23 @@ export default {
           // varredura completa e aceitavel, porque roda uma vez e nao esta no
           // caminho de nenhuma tela.
           if (resumo?.no_lote > 0) await atualizarContagem(env.DB);
+
+          /*
+           * APURACAO DAS METRICAS, DEPOIS DA CARGA E EM LOTE.
+           *
+           * Depois porque a metrica tem que sair dos candles de hoje, nao dos
+           * de ontem. Em lote porque calcular 96 ativos em 3 tempos graficos
+           * numa execucao so varre centenas de milhares de candles, e o plano
+           * gratuito limita o tempo de processador por execucao.
+           *
+           * Com 10 ativos por execucao e 12 execucoes na janela, os 96 cabem
+           * com folga. Quando acaba, a consulta de selecao nao devolve nada e
+           * as execucoes restantes nao fazem trabalho nenhum.
+           */
+          const metricas = await apurarLote(env.DB, { lote: 10 });
+          if (metricas.ok || metricas.falhas) {
+            console.log("apuracao de metricas:", JSON.stringify(metricas));
+          }
         } catch (e) {
           // Sem este try, uma excecao aqui some sem deixar rastro, e a carga
           // falha em silencio. Ja perdemos tempo com isso uma vez.
