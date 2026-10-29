@@ -428,8 +428,28 @@ export async function ingerirLote(db, env, opts = {}) {
 export async function atualizarUm(db, env, ticker, market, kind = "demanda") {
   const provider = getProvider(null, env);
 
+  /*
+   * O range_carregado precisa vir desta consulta, e nao e detalhe.
+   *
+   * A versao anterior lia so o COUNT e depois passava r.range_carregado para a
+   * funcao que impede a profundidade de regredir. O campo nao existia no
+   * resultado, entao chegava undefined, e "5d" sempre ganhava de nada: cada
+   * atualizacao sob demanda rebaixava o ativo de 10 anos para 5 dias.
+   *
+   * O efeito seria o alarme de historico raso acusando o catalogo inteiro, um
+   * ativo de cada vez, conforme as pessoas fossem abrindo os graficos. E o
+   * alarme estaria tecnicamente certo sobre um dado que nos mesmos
+   * corrompemos.
+   */
   const r = await db
-    .prepare(`SELECT COUNT(*) AS n FROM daily_bars WHERE ticker = ?`)
+    .prepare(
+      // EXISTS, nao COUNT: a pergunta e "tem algum candle?", e COUNT obrigaria
+      // a percorrer os milhares de candles do ativo para responder sim ou nao.
+      // Mesmo erro que custou 46.920 linhas por execucao na selecao do lote.
+      `SELECT EXISTS (SELECT 1 FROM daily_bars b WHERE b.ticker = a.ticker) AS n,
+              a.range_carregado
+         FROM assets a WHERE a.ticker = ?`
+    )
     .bind(ticker)
     .first();
 
