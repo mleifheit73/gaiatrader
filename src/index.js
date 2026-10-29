@@ -150,12 +150,19 @@ async function rotaBarras(url, env, ctx) {
     corte = t.cortado ? t.buraco : null;
   }
 
+  // ORDEM DOS CAMPOS: TODO O DIAGNOSTICO ANTES DO VETOR DE CANDLES.
+  //
+  // Nao e capricho. Com 2.491 candles a resposta passa de 300 KB, e qualquer
+  // leitor que corte o conteudo (um navegador, uma ferramenta, um log) perde o
+  // que vem depois. Na primeira conferencia da serie ajustada o objeto "ajuste"
+  // estava no fim e sumiu exatamente quando era necessario. Diagnostico que
+  // desaparece quando a resposta cresce nao serve para nada, porque some
+  // justamente nos casos grandes, que sao os que costumam dar problema.
   return json({
     ticker,
     ativo: ativo || null,
     total: bars.length,
     serie: querAjustado ? "ajustada" : "bruta",
-    bars,
     ajuste,
     // Quando preenchido, a serie tem um buraco e so o trecho posterior a ele foi
     // devolvido. Acontece em troca de codigo (NATU3) e em ativo com candle solto
@@ -166,6 +173,7 @@ async function rotaBarras(url, env, ctx) {
       minutos_desde_ultima_carga: controle?.last_ok_at ? minutosDesde : null,
       atualizando_em_segundo_plano: !!(velho && ativo && ctx),
     },
+    bars,
   });
 }
 
