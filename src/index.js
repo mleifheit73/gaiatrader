@@ -18,6 +18,7 @@ import { estado as estadoLimite, liberar, limparAntigos } from "./limites.js";
 import { ajustar, trechoContinuo, intervaloMaximo } from "./ajuste.js";
 import { costurar } from "./costura.js";
 import { agregar } from "./agregacao.js";
+import { leituraAtual } from "./indicadores.js";
 
 const json = (data, status = 200, extra = {}) =>
   new Response(JSON.stringify(data, null, 2), {
@@ -280,6 +281,33 @@ export default {
       if (rota === "/api/bars") return rotaBarras(url, env, ctx);
 
       if (rota === "/api/status") return rotaStatus(env);
+
+      // Leitura de indicadores de um ativo, no tempo grafico pedido.
+      //
+      // Reaproveita a rota de candles de proposito: assim indicador e grafico
+      // leem exatamente a mesma serie, com o mesmo ajuste e o mesmo corte de
+      // trecho continuo. Duas leituras diferentes da mesma coisa seriam duas
+      // fontes de verdade, e uma delas estaria errada em algum momento.
+      if (rota === "/api/indicadores") {
+        // Indicador calcula na serie AJUSTADA por proventos e no trecho
+        // continuo, sempre. Nao e opcional: media longa atravessando provento
+        // ou buraco de serie da numero errado com cara de certo.
+        url.searchParams.set("ajustado", "1");
+        url.searchParams.set("continuo", "1");
+
+        const resposta = await rotaBarras(url, env, ctx);
+        const dados = await resposta.json();
+        if (dados.erro) return json(dados, resposta.status);
+
+        return json({
+          ticker: dados.ticker,
+          ativo: dados.ativo,
+          periodo: dados.periodo,
+          serie: dados.serie,
+          trecho_cortado_em: dados.trecho_cortado_em,
+          leitura: leituraAtual(dados.bars),
+        });
+      }
 
       // Dispara uma carga manualmente, para nao depender do horario do agendamento
       // durante o desenvolvimento. Protegido por segredo.
