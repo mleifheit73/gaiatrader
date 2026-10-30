@@ -53,7 +53,7 @@ crons = ["30,35,40,45,50,55 0 * * *", "0,5,10,15,20,25 1 * * *"]
 DATA_PROVIDER = "yahoo"
 # Endereco de suporte mostrado ao usuario. Fica como configuracao para que a
 # troca para suporte@gaiatrader.com.br custe uma linha.
-SUPORTE_EMAIL = "info@gaiabelle.com"
+SUPORTE_EMAIL = "contato@gaiatrader.com.br"
 
 # Segredos (NAO ficam neste arquivo). Defina com:
 #   npx wrangler secret put ADMIN_TOKEN
