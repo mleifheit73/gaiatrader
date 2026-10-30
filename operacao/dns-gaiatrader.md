@@ -51,11 +51,35 @@ Existe tarefa agendada para avisar em 30/09/2027.
 A senha fica no gerenciador de senhas do Marcelo. Não é guardada aqui
 nem em lugar nenhum do projeto.
 
+## Andamento (30/10/2026, 17h40)
+
+**Feito.** O domínio foi adicionado à conta `gaiatrader` da Cloudflare,
+no plano Free. A importação automática trouxe os onze registros, número
+que bate com o inventário acima.
+
+**Defeito encontrado e corrigido na importação.** A Cloudflare marcou
+cinco registros como **Proxied** que precisam ser **DNS only**: os três
+DKIM (`hostingermail-a/b/c._domainkey`), o `autoconfig` e o
+`autodiscover`. Proxied, a Cloudflare responde com o IP dela em vez de
+resolver o endereço real da Hostinger: a assinatura DKIM falha e os
+e-mails enviados passam a cair em spam, sem mensagem de erro nenhuma.
+Os cinco foram passados para DNS only e conferidos na tela.
+
+O `A @` e o `CNAME www` seguem Proxied de propósito: são tráfego web e
+vão dar lugar ao Worker.
+
+**Parou aqui.** A extensão do Chrome desconectou logo após o clique em
+"Continue to activation". Nada ficou num estado perigoso: os nameservers
+na Hostinger continuam os de estacionamento, então o domínio se comporta
+como antes, e a zona na Cloudflare fica em "Pending" sem efeito algum
+até os nameservers mudarem.
+
 ## Pendente
 
-1. Adicionar o domínio na Cloudflare e conferir se os nove registros de
-   e-mail foram importados.
+1. Retomar na Cloudflare, concluir a ativação e anotar os dois
+   nameservers.
 2. Trocar os nameservers na Hostinger pelos dois da Cloudflare.
+   **Este é o único passo que muda o comportamento do domínio.**
 3. Ligar o domínio ao Worker (Workers & Pages, Domains & Routes).
 4. Trocar `SUPORTE_EMAIL` no `wrangler.toml`, hoje `info@gaiabelle.com`,
    para `contato@gaiatrader.com.br`.
