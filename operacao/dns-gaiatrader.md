@@ -74,10 +74,18 @@ na Hostinger continuam os de estacionamento, então o domínio se comporta
 como antes, e a zona na Cloudflare fica em "Pending" sem efeito algum
 até os nameservers mudarem.
 
-## Pendente
+## Nameservers da Cloudflare para este domínio
 
-1. Retomar na Cloudflare, concluir a ativação e anotar os dois
-   nameservers.
+```
+nile.ns.cloudflare.com
+rosalyn.ns.cloudflare.com
+```
+
+Conferidos caractere a caractere na tela em 30/10/2026. São exclusivos
+desta conta. Substituem `aurora.dns-parking.com` e
+`nebula.dns-parking.com`, que eram os de estacionamento da Hostinger.
+
+## Pendente
 2. Trocar os nameservers na Hostinger pelos dois da Cloudflare.
    **Este é o único passo que muda o comportamento do domínio.**
 3. Ligar o domínio ao Worker (Workers & Pages, Domains & Routes).
