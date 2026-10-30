@@ -145,6 +145,18 @@ export async function apurarLote(db, opts = {}) {
       if (!bars.length) throw new Error("sem candles");
       candlesLidos += bars.length;
 
+      /*
+       * LIQUIDEZ E SEMPRE DIARIA, EM QUALQUER TEMPO GRAFICO.
+       *
+       * Calculada sobre a serie agregada, ela somaria o volume do periodo
+       * inteiro: no mensal a ABEV3 aparecia com R$ 8,8 bilhoes, que e o giro do
+       * mes, nao do dia. O filtro de liquidez que o usuario conhece e por dia
+       * (R$ 5 milhoes na B3), entao o numero precisa significar a MESMA coisa
+       * nos tres tempos graficos, ou o mesmo filtro daria resultados diferentes
+       * conforme a aba aberta.
+       */
+      const liquidezDiaria = leituraAtual(bars).liquidez_media;
+
       for (const periodo of periodos) {
         const serie = periodo === "dia" ? bars : agregar(bars, periodo);
         const L = leituraAtual(serie);
@@ -152,7 +164,7 @@ export async function apurarLote(db, opts = {}) {
         linhas.push([
           alvo.ticker, periodo, L.data, L.base, L.fechamento,
           L.mma_curta, L.mma_longa, L.ifr_curto, L.ifr_longo,
-          L.atr, L.liquidez_media, L.em_formacao ? 1 : 0, corte?.retomou_em || null,
+          L.atr, liquidezDiaria, L.em_formacao ? 1 : 0, corte?.retomou_em || null,
         ]);
       }
       ok++;

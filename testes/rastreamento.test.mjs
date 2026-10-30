@@ -127,6 +127,21 @@ ok("calculado_em entra como expressao, sem gastar parametro",
    /datetime\('now'\)\)/.test(insert));
 
 // ---------------------------------------------------------------------------
+// 2c. LIQUIDEZ E A MESMA NOS TRES TEMPOS GRAFICOS
+//
+// Calculada sobre a serie agregada, ela somaria o volume do periodo inteiro, e
+// o mesmo filtro de R$ 5 milhoes por dia daria resultados diferentes conforme a
+// aba aberta.
+// ---------------------------------------------------------------------------
+const liqs = ["dia", "semana", "mes"].map(
+  (p) => db1.gravadas.find((g) => g.ticker === "AAAA3" && g.periodo === p).liquidez);
+ok("liquidez identica no diario, semanal e mensal",
+   liqs.every((x) => Math.abs(x - liqs[0]) < 1e-9),
+   liqs.map((x) => Math.round(x)).join(" / "));
+ok("liquidez tem ordem de grandeza de giro DIARIO",
+   liqs[0] > 1e6 && liqs[0] < 1e9, `${Math.round(liqs[0])}`);
+
+// ---------------------------------------------------------------------------
 // 3. A APURACAO USA A SERIE AJUSTADA, SEMPRE
 // Um provento no meio da serie tem que mudar a media longa. Se nao mudar, o
 // ajuste nao esta sendo aplicado.
