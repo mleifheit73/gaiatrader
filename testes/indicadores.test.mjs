@@ -90,6 +90,19 @@ const barato = Array.from({ length: 25 }, () => barra(2, 2.1, 1.9, 1_000_000));
 const caro = Array.from({ length: 25 }, () => barra(200, 201, 199, 1_000_000));
 ok("liquidez do papel barato", quase(liquidezMedia(barato, 21).at(-1), 2_000_000));
 ok("liquidez do papel caro e 100x maior", quase(liquidezMedia(caro, 21).at(-1), 200_000_000));
+// Em cripto o provedor ja entrega o volume EM DINHEIRO. Multiplicar pelo preco
+// conta o preco duas vezes: foi assim que o BTC saiu com 2 quatrilhoes por dia
+// e o SHIB, cujo preco e 0,00001, saiu com R$ 277.
+const cripto = Array.from({ length: 25 }, () => barra(76000, 77000, 75000, 44_000_000_000));
+ok("cripto: volume ja financeiro nao e multiplicado pelo preco",
+   quase(liquidezMedia(cripto, 21, true).at(-1), 44_000_000_000));
+ok("cripto: sem a correcao o numero fica absurdo",
+   liquidezMedia(cripto, 21, false).at(-1) > 1e14);
+
+const shib = Array.from({ length: 25 }, () => barra(0.00001, 0.000011, 0.000009, 500_000_000));
+ok("moeda de preco minusculo nao vira liquidez ridicula",
+   quase(liquidezMedia(shib, 21, true).at(-1), 500_000_000));
+
 ok("filtro de R$ 5 milhoes separa os dois",
    liquidezMedia(barato, 21).at(-1) < 5e6 && liquidezMedia(caro, 21).at(-1) > 5e6);
 

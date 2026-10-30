@@ -141,9 +141,24 @@ export function atr(bars, periodo) {
  * Volume em quantidade nao serve para comparar ativos: 1 milhao de acoes de
  * R$ 2 e 1 milhao de acoes de R$ 200 sao negocios de tamanhos completamente
  * diferentes. O filtro de liquidez tem que ser em dinheiro.
+ *
+ * ATENCAO A UNIDADE DO VOLUME, QUE MUDA POR MERCADO
+ *
+ * Em acao, o volume vem em QUANTIDADE de papeis, entao o giro financeiro e
+ * preco vezes volume. Em cripto, o provedor ja entrega o volume EM DINHEIRO, e
+ * multiplicar pelo preco conta o preco duas vezes.
+ *
+ * O erro apareceu grande: o BTC saiu com liquidez de 2 quatrilhoes por dia. O
+ * volume dele, 44,5 bilhoes, so pode ser dolar, porque 44 bilhoes de bitcoins
+ * nao existem (ha 21 milhoes no mundo inteiro). E apareceu pequeno tambem, do
+ * outro lado: o SHIB saiu com R$ 277 por dia, porque o preco dele e 0,00001 e
+ * multiplicou um numero que ja era financeiro.
  */
-export function liquidezMedia(bars, periodo) {
-  return mediaMovel(bars.map((b) => b.c * (b.v || 0)), periodo);
+export function liquidezMedia(bars, periodo, volumeJaEhFinanceiro = false) {
+  return mediaMovel(
+    bars.map((b) => (volumeJaEhFinanceiro ? b.v || 0 : b.c * (b.v || 0))),
+    periodo
+  );
 }
 
 /**
@@ -177,7 +192,7 @@ export function leituraAtual(bars, cfg = {}) {
     ifr_curto: ultimo(ifr(b, periodos.ifrCurto)),
     ifr_longo: ultimo(ifr(b, periodos.ifrLongo)),
     atr: ultimo(atr(b, periodos.atr)),
-    liquidez_media: ultimo(liquidezMedia(b, periodos.liquidez)),
+    liquidez_media: ultimo(liquidezMedia(b, periodos.liquidez, !!cfg.volumeJaEhFinanceiro)),
     periodos,
   };
 }

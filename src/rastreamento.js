@@ -155,7 +155,12 @@ export async function apurarLote(db, opts = {}) {
        * nos tres tempos graficos, ou o mesmo filtro daria resultados diferentes
        * conforme a aba aberta.
        */
-      const liquidezDiaria = leituraAtual(bars).liquidez_media;
+      // Em cripto o provedor ja entrega o volume em dinheiro; em acao vem em
+      // quantidade de papeis. Sem essa distincao o BTC sai com liquidez de 2
+      // quatrilhoes e o SHIB com R$ 277.
+      const liquidezDiaria = leituraAtual(bars, {
+        volumeJaEhFinanceiro: alvo.market === "cripto",
+      }).liquidez_media;
 
       for (const periodo of periodos) {
         const serie = periodo === "dia" ? bars : agregar(bars, periodo);
