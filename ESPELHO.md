@@ -54,7 +54,7 @@ Status: **feito**, **parcial**, **a fazer**.
 |---|---|---|
 | 76 ações do Ibovespa | feito | lista `IBOV` confere com a base |
 | 20 criptomoedas | feito | lista `CRYPTO` confere |
-| Ibovespa (`^BVSP`) | **a fazer** | o artefato carrega como contexto; a base tem zero índices |
+| Ibovespa (`^BVSP`) | **em carga** | cadastrado como `market='indice'`; a varredura das 21h30 faz a carga de 10 anos. Conferência cruzada em `testes/conferir-ibovespa.mjs` |
 | Dólar (`USDBRL=X`) | **a fazer** | ver ressalva abaixo |
 | Histórico diário | feito | 235.128 candles |
 | Semanal e mensal | feito | agregação local |
