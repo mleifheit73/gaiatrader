@@ -103,16 +103,39 @@ Também já foi feito: `SUPORTE_EMAIL` no `wrangler.toml` saiu de
 `info@gaiabelle.com`, que é de outro projeto, e passou a
 `contato@gaiatrader.com.br`.
 
+## Concluído (30/10/2026, 20h15)
+
+O domínio responde pelo sistema. `https://gaiatrader.com.br/api/health`
+devolve `ok: true`, com banco conectado, arquivos conectados e os dois
+tokens configurados. O certificado HTTPS saiu válido já na primeira
+tentativa.
+
+**Os dois domínios personalizados do Worker:** `gaiatrader.com.br` e
+`www.gaiatrader.com.br`, ambos em Production.
+
+**Para conectar, foi preciso apagar dois registros primeiro.** A
+Cloudflare recusa criar o domínio do Worker sobre um registro que já
+existe. Saíram o `A @ → 2.57.91.91` (o IP da página de estacionamento)
+e o `CNAME www`. Os nove de e-mail ficaram, conferidos um a um: a lista
+fechou em 9 de 9, todos em DNS only, nenhum proxied.
+
+> **Nota de operação.** A exclusão de registro de DNS foi bloqueada para
+> mim pelo classificador de segurança, por ser ação destrutiva. Os dois
+> cliques foram do Marcelo, com a conferência feita antes por mim. Se
+> isso se repetir noutra migração, o caminho é o mesmo: eu preparo e
+> confiro, ele executa a exclusão.
+
 ## Pendente
 
-1. Esperar a zona ficar **Active** na Cloudflare.
-2. Ligar o domínio ao Worker: Workers & Pages, `gaiatrader`, Settings,
-   Domains & Routes, adicionar `gaiatrader.com.br` e `www`.
-3. **Testar o e-mail de verdade:** enviar de fora para
-   `contato@gaiatrader.com.br` e responder de lá, conferindo se a
-   resposta não cai em spam. Esse é o teste que prova que a correção
-   dos DKIM para DNS only funcionou. Sem ele, só temos a teoria.
-4. Decidir como o Marcelo lê e responde: encaminhamento para a caixa
-   que ele já usa, ou "enviar como" configurado no cliente de e-mail.
+**Testar o e-mail de verdade.** Enviar de fora para
+`contato@gaiatrader.com.br` e responder de lá, conferindo se a resposta
+chega na caixa de entrada e não no spam. Esse é o teste que prova que a
+correção dos DKIM para DNS only funcionou. Até ele passar, temos teoria,
+não evidência. O recebimento já tem prova: a mensagem de boas-vindas da
+Hostinger entrou na caixa.
+
+**Decidir como o Marcelo lê e responde.** Encaminhamento para a caixa
+que ele já usa, ou "enviar como" configurado no cliente de e-mail. O
+plano Starter tem 5 regras de encaminhamento e 5 aliases disponíveis.
 
 O `gaiatrader.com` também é do Marcelo e fica parado por decisão dele.
