@@ -1,0 +1,206 @@
+/* ============================================================
+   Gaia Trader, tokens de design
+   ------------------------------------------------------------
+   Arquivo NOVO e aditivo. Nenhuma pagina existente importa
+   isto, e admin.html e rastreamento.html seguem com o :root
+   proprio. Remover este arquivo nao quebra nada do que ja
+   funciona. Paginas novas importam daqui.
+
+   Origem: o artefato Gaia Trader, que ja tinha a direcao
+   visual definida. Nao inventamos paleta, codificamos a que
+   existe, com tres correcoes medidas e documentadas no
+   DESIGN.md:
+     1. cinco cores do tema claro escurecidas para passar
+        4,5:1 de contraste (o tema escuro ja passava);
+     2. semantica de mercado (alta/baixa) separada da
+        semantica de interface (ok/atencao/perigo);
+     3. --linha-forte para borda de campo de formulario,
+        que precisa de 3:1 pela WCAG 1.4.11.
+
+   Fontes: NAO sao importadas aqui de proposito. @import em
+   CSS cria cadeia de carregamento em serie e atrasa a
+   primeira pintura. Cada pagina leva no <head>:
+
+     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?
+       family=Archivo:wght@500;700;800
+       &family=Outfit:wght@500
+       &family=IBM+Plex+Sans:wght@400;500;600
+       &family=IBM+Plex+Mono:wght@400;500&display=swap">
+   ============================================================ */
+
+:root {
+  /* ---------- superficies e texto, tema claro ---------- */
+  --bg: #e4e1d9;              /* fundo da pagina, papel quente */
+  --panel: #efece5;           /* cartao, painel, cabecalho de tabela */
+  --line: #d2cdc2;            /* divisoria decorativa */
+  --linha-forte: #8b7f66;     /* borda de campo, 3,02:1 no fundo */
+  --fg: #22211d;              /* texto principal, 12,33:1 */
+  --muted: #66625a;           /* texto secundario, 4,65:1 */
+
+  /* ---------- marca e acao ---------- */
+  --brand: #0b7058;           /* marca, 4,63:1 (era #0e8a6c, 3,30:1) */
+  --brand-fg: #16211d;        /* palavra GAIA no logotipo */
+  --accent: #0a7052;          /* botao, link, foco, 4,65:1 */
+  --accent-soft: #dde6dc;     /* realce de linha e aviso */
+
+  /* ---------- semantica de MERCADO ----------
+     Direcao de preco. Papel caindo nao e erro, e informacao.
+     Por isso nao compartilha token com estado de interface. */
+  --alta: #0c713e;            /* 4,66:1 */
+  --baixa: #b33628;           /* 4,62:1 */
+
+  /* ---------- semantica de INTERFACE ----------
+     Resultado de uma acao do usuario ou do sistema. */
+  --ok: #0c713e;              /* sucesso, gravou, conectou */
+  --atencao: #8a5700;         /* 4,67:1, precisa de olho humano */
+  --perigo: #b33628;          /* falhou, vai apagar, estourou cota */
+
+  /* ---------- series de grafico ----------
+     Quatro matizes distinguiveis, todas acima de 3:1. */
+  --c1: #2463c7;  --c2: #b5531b;  --c3: #7b3fb0;  --c4: #0e7f8c;
+  --bb: #8a9a93;              /* banda, envelope, area de fundo */
+
+  /* ---------- apelidos de compatibilidade ----------
+     O markup do artefato usa estes nomes. Mantidos para que
+     um componente seja portado sem reescrever o CSS dele. */
+  --up: var(--alta);
+  --down: var(--baixa);
+  --warn: var(--atencao);
+
+  /* ---------- tipografia ---------- */
+  --f-display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --f-marca: "Outfit", var(--f-display);
+  --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+
+  /* Escala do APP: densa, base 14. Tabela de ativos e painel
+     de indicadores precisam de muita informacao por tela. */
+  --t-micro: 11px;    /* etiqueta, cabecalho de coluna */
+  --t-meta: 12px;     /* carimbo de data, legenda */
+  --t-sm: 13px;       /* controle, texto secundario */
+  --t-base: 14px;     /* corpo do app */
+  --t-lg: 15px;       /* titulo de painel, abertura */
+  --t-xl: 17px;       /* titulo de dialogo */
+  --t-2xl: 20px;      /* titulo de secao */
+  --t-3xl: 24px;      /* titulo de pagina */
+  --t-4xl: 30px;
+
+  /* Escala de MARKETING: base 16, display grande. Pagina de
+     vendas e lida de longe e em celular, nao escaneada. */
+  --m-base: 16px;
+  --m-lg: 18px;
+  --m-xl: 21px;
+  --m-2xl: 26px;
+  --m-3xl: 34px;
+  --m-4xl: 44px;
+  --m-hero: clamp(34px, 6vw, 60px);
+
+  --lh-apertado: 1.15;        /* titulo */
+  --lh-normal: 1.45;          /* corpo do app */
+  --lh-solto: 1.6;            /* texto corrido, ajuda, vendas */
+
+  /* ---------- espacamento ----------
+     Escala de base 2, como o artefato usa de fato. Nao forcei
+     grade de 4: linha de numero precisa de 2px e 6px. */
+  --e1: 2px;   --e2: 4px;   --e3: 6px;   --e4: 8px;
+  --e5: 10px;  --e6: 12px;  --e7: 14px;  --e8: 16px;
+  --e9: 20px;  --e10: 24px; --e11: 32px; --e12: 48px; --e13: 64px;
+
+  /* ---------- forma ---------- */
+  --r-sm: 3px;    /* marcador, barra fina */
+  --r-md: 6px;    /* botao, campo, chip */
+  --r-lg: 8px;    /* painel, aviso, cartao */
+  --r-xl: 10px;   /* dialogo */
+  --r-pill: 99px;
+
+  /* ---------- profundidade, tres niveis ---------- */
+  --s-elevado: 0 4px 14px rgba(0,0,0,.18);   /* dica, tooltip */
+  --s-flutuante: 0 10px 28px rgba(0,0,0,.35); /* popover, sugestao */
+  --s-modal: 0 18px 50px rgba(0,0,0,.45);     /* dialogo, tour */
+
+  /* ---------- largura ---------- */
+  --w-app: 1500px;      /* mesa de operacao, aproveita monitor largo */
+  --w-site: 1120px;     /* pagina de marketing */
+  --w-texto: 70ch;      /* paragrafo de vendas */
+  --w-leitura: 78ch;    /* ajuda, parecer, texto longo do app */
+
+  color-scheme: light;
+}
+
+/* ============================================================
+   TEMA ESCURO
+   Passa 4,5:1 em todos os pares de texto sem correcao. Valores
+   vindos do artefato sem alteracao, exceto --linha-forte, que
+   e novo.
+   ============================================================ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1412;  --panel: #151d1a;  --line: #26322d;
+    --linha-forte: #4e675c;  --fg: #e4ece8;  --muted: #8fa199;
+    --brand: #2ed4ac;  --brand-fg: #f6f6f6;
+    --accent: #3fcf97;  --accent-soft: #183a2d;
+    --alta: #3fcf86;  --baixa: #ff6b5a;
+    --ok: #3fcf86;  --atencao: #e7a93a;  --perigo: #ff6b5a;
+    --c1: #6ea2ff;  --c2: #ff9a5c;  --c3: #c290ff;  --c4: #4fd1db;
+    --bb: #6f8079;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1412;  --panel: #151d1a;  --line: #26322d;
+  --linha-forte: #4e675c;  --fg: #e4ece8;  --muted: #8fa199;
+  --brand: #2ed4ac;  --brand-fg: #f6f6f6;
+  --accent: #3fcf97;  --accent-soft: #183a2d;
+  --alta: #3fcf86;  --baixa: #ff6b5a;
+  --ok: #3fcf86;  --atencao: #e7a93a;  --perigo: #ff6b5a;
+  --c1: #6ea2ff;  --c2: #ff9a5c;  --c3: #c290ff;  --c4: #4fd1db;
+  --bb: #6f8079;
+  color-scheme: dark;
+}
+
+/* ============================================================
+   BASE
+   So o indispensavel. Componentes ficam fora deste arquivo,
+   para que remover os tokens nao arraste estilo de pagina.
+   ============================================================ */
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: var(--t-base)/var(--lh-normal) var(--f-body);
+  -webkit-text-size-adjust: 100%;
+}
+
+/* REGRA FIRME: todo numero usa mono com largura tabular. Sem
+   isso a coluna de precos dança a cada atualizacao e o olho
+   nao consegue comparar duas linhas. */
+.num, td.num, .mono {
+  font-family: var(--f-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--f-display);
+  line-height: var(--lh-apertado);
+  margin: 0;
+}
+
+a { color: var(--accent); }
+
+/* Foco visivel em tudo que recebe teclado. Nunca remover. */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}
