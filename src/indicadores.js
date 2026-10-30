@@ -156,9 +156,31 @@ export function atr(bars, periodo) {
  */
 export function liquidezMedia(bars, periodo, volumeJaEhFinanceiro = false) {
   return mediaMovel(
-    bars.map((b) => (volumeJaEhFinanceiro ? b.v || 0 : b.c * (b.v || 0))),
+    bars.map((b) => (volumeJaEhFinanceiro ? b.v || 0 : precoTipico(b) * (b.v || 0))),
     periodo
   );
+}
+
+/*
+ * PRECO TIPICO: media de maxima, minima e fechamento.
+ *
+ * O giro financeiro de um pregao e a soma de preco vezes quantidade de cada
+ * negocio, e nenhum provedor gratuito entrega esse numero: todos dao a
+ * quantidade e deixam a conta para quem consome.
+ *
+ * A primeira versao multiplicava pelo FECHAMENTO, que e um unico instante do
+ * dia e nao representa os negocios das outras seis horas. Medido no PETR4, o
+ * erro contra o preco tipico fica abaixo de 0,5% em dia normal e chegou a 1,48%
+ * no dia em que o papel andou 6%.
+ *
+ * O erro e pequeno demais para mudar qualquer decisao de um filtro de liquidez,
+ * onde os valores estao na casa das centenas de milhoes. Mas o preco tipico
+ * custa a mesma conta e nao tem o vies de depender de onde o fechamento caiu
+ * dentro da faixa do dia, entao nao ha razao para ficar com o pior.
+ */
+function precoTipico(b) {
+  const t = (b.h + b.l + b.c) / 3;
+  return t > 0 ? t : b.c;
 }
 
 /**

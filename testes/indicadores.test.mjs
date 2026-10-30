@@ -88,8 +88,19 @@ ok("ATR nunca e negativo", atr(vaiEVem, 14).filter((x) => x !== null).every((x) 
 // ---------------------------------------------------------------------------
 const barato = Array.from({ length: 25 }, () => barra(2, 2.1, 1.9, 1_000_000));
 const caro = Array.from({ length: 25 }, () => barra(200, 201, 199, 1_000_000));
-ok("liquidez do papel barato", quase(liquidezMedia(barato, 21).at(-1), 2_000_000));
-ok("liquidez do papel caro e 100x maior", quase(liquidezMedia(caro, 21).at(-1), 200_000_000));
+// barra(c, h, l, v): preco tipico = (h + l + c) / 3
+ok("liquidez usa o preco tipico, nao o fechamento",
+   quase(liquidezMedia(barato, 21).at(-1), ((2.1 + 1.9 + 2) / 3) * 1_000_000));
+ok("liquidez do papel caro e cerca de 100x maior",
+   quase(liquidezMedia(caro, 21).at(-1), ((201 + 199 + 200) / 3) * 1_000_000));
+
+// Num dia de amplitude grande, fechamento e preco tipico divergem de verdade.
+const diaVolatil = Array.from({ length: 25 }, () => barra(53.88, 54.23, 51.17, 141_338_400));
+const porTipico = liquidezMedia(diaVolatil, 21).at(-1);
+const porFechamento = 53.88 * 141_338_400;
+ok("em dia de 6% de amplitude os dois metodos divergem acima de 1%",
+   Math.abs(porTipico / porFechamento - 1) > 0.01,
+   `${((porTipico / porFechamento - 1) * 100).toFixed(2)}%`);
 // Em cripto o provedor ja entrega o volume EM DINHEIRO. Multiplicar pelo preco
 // conta o preco duas vezes: foi assim que o BTC saiu com 2 quatrilhoes por dia
 // e o SHIB, cujo preco e 0,00001, saiu com R$ 277.
