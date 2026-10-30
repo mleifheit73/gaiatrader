@@ -154,26 +154,40 @@ SVG em linha, traço de 1,4 a 1,8, `viewBox` 24×24, `currentColor`,
 ícone**. Captura de tela real do produto na página de vendas, nunca
 ilustração genérica de pessoa olhando gráfico.
 
-## O que não existe, de propósito
+## Julgamento: o que o produto afirma
 
-**Nenhum componente de veredito.** As classes `.verdict.buy`,
-`.verdict.sell`, `.verdict.hold` e o medidor de 0 a 100 do artefato
-**não entram** no produto pago. Dois motivos:
+> **Decisão revista em 30/10/2026.** Uma decisão anterior do mesmo dia
+> dizia o contrário. Esta é a que vale.
 
-1. Emitir recomendação sobre valor mobiliário específico mediante
-   remuneração é atividade regulada pela CVM (Resoluções 19 e 20).
-2. Não existe backtest nenhum destes setups. Afirmar desempenho sem
-   teste é propaganda falsa, mesmo que involuntária.
+O produto pago **mantém o julgamento do artefato**: a coluna Situação
+(Setup, Observar, Risco, Evitar), a Pontuação de 0 a 7, as checklists de
+filtro e gatilho, a Entrada, o Stop, o Alvo e o Veredito do parecer. O
+método está em `METODO.md`.
 
-**A IA é professora, não oráculo.** Ela trabalha sobre o plano que o
-usuário propõe: ele diz onde quer entrar e por quê, e ela explica o que
-o gráfico mostra, aponta o que ele não considerou e critica o risco
-retorno que ele mesmo calculou. Ela **não origina** entrada, stop ou
-alvo. Isso é restrição de projeto, não de redação, e vale para o prompt
-tanto quanto para a interface.
+Os componentes correspondentes seguem no sistema: `.verdict` com
+`.buy/.sell/.hold/.watch`, `.par-v`, `.meter`, `.score`, `.pill` com
+`.go/.watch/.no`.
 
-**Nada de copy prometendo desempenho**, lucro, acerto ou vantagem, em
-nenhuma página. Sem teste, não há o que prometer.
+### Duas condições presas a essa decisão
+
+**1. CNPI antes da primeira cobrança.** Emitir recomendação sobre valor
+mobiliário específico mediante remuneração é atividade regulada pela CVM
+(Resoluções 19 e 20). Com Situação, Entrada, Stop, Alvo e Veredito no
+produto pago, a cobrança não deve começar sem profissional certificado
+respondendo pelas análises. Isto é condição, não lembrete.
+
+**2. Nenhuma promessa de desempenho, em lugar nenhum.** Esta é
+independente da primeira. O CNPI resolve **quem pode** emitir
+recomendação; ele não torna um sinal eficaz. Não existe backtest destes
+setups. Então a página de vendas, a interface e qualquer texto do
+produto não afirmam nem insinuam resultado, acerto, lucro ou vantagem,
+mesmo com o registro em dia. São dois problemas e só o primeiro tem
+solução contratável.
+
+O artefato já acerta o tom e serve de referência: a conclusão de Setup
+diz "Não é recomendação de compra: significa que o plano está completo",
+e o rodapé afirma que a decisão é sempre do usuário. Esse registro se
+mantém.
 
 ## Marketing (landing page)
 
