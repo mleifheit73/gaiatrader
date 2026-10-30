@@ -639,6 +639,55 @@ export async function ativosComCandles(db) {
 }
 
 /**
+ * Ativos cujo ultimo candle esta atras do resto do mercado deles.
+ *
+ * POR QUE ESTE ALARME PRECISOU EXISTIR
+ *
+ * Em 30/10/2026 a varredura noturna rodou sem nenhuma falha, carregou os 96
+ * ativos e registrou tudo como sucesso. Ainda assim, 20 ativos da B3 ficaram
+ * sem o candle do pregao anterior, porque o provedor ainda nao o tinha
+ * publicado para aqueles papeis no momento da leitura.
+ *
+ * Nenhum alarme disparou. Os que existiam olhavam ativo sem candle nenhum e
+ * ativo com historico raso, e os 20 nao se encaixavam em nenhum dos dois: eles
+ * tinham 2.500 candles e dez anos de profundidade, faltava UM dia.
+ *
+ * A comparacao e contra o proprio mercado do ativo, nao contra o calendario.
+ * Comparar com "hoje" exigiria saber o calendario de feriados da B3, e erraria
+ * todo feriado. O mercado e a propria referencia: se 56 ativos da B3 tem candle
+ * de ontem e 20 nao tem, os 20 estao atrasados, qualquer que seja o dia.
+ *
+ * Custo: uma busca por indice por ativo, 96 no total.
+ */
+export async function atrasados(db) {
+  const { results } = await db
+    .prepare(
+      `SELECT a.ticker, a.market,
+              (SELECT MAX(b.d) FROM daily_bars b WHERE b.ticker = a.ticker) AS ultimo
+         FROM assets a
+        WHERE a.active = 1
+        ORDER BY a.market, a.ticker`
+    )
+    .all();
+
+  const referencia = {};
+  for (const r of results || []) {
+    if (r.ultimo && (!referencia[r.market] || r.ultimo > referencia[r.market])) {
+      referencia[r.market] = r.ultimo;
+    }
+  }
+
+  return (results || [])
+    .filter((r) => r.ultimo && r.ultimo < referencia[r.market])
+    .map((r) => ({
+      ticker: r.ticker,
+      market: r.market,
+      ultimo_candle: r.ultimo,
+      mercado_esta_em: referencia[r.market],
+    }));
+}
+
+/**
  * Ativos carregados com menos profundidade do que a desejada.
  *
  * Serve de alarme no painel, do mesmo jeito que inconsistentes(). Deve ficar

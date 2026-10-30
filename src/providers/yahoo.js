@@ -132,6 +132,23 @@ export const yahoo = {
     const agora = Math.floor(Date.now() / 1000);
     const sessaoAberta = fimDaSessao ? agora < fimDaSessao : null;
 
+    /*
+     * DE QUAL PREGAO E A SESSAO QUE ESTA ABERTA.
+     *
+     * Saber que existe sessao aberta nao basta: e preciso saber se a BARRA e
+     * daquela sessao. A versao anterior confundia as duas coisas e carimbava
+     * como "em formacao" o candle do pregao ANTERIOR, bastando que o Yahoo ja
+     * tivesse virado o ponteiro para o pregao seguinte.
+     *
+     * Foi o que aconteceu em 30/10/2026: as 08h58, com a B3 ainda fechada, o
+     * candle de 29/10, encerrado na vespera, voltou marcado como em formacao.
+     * Um indicador que respeite esse marcador se recusaria a usar um pregao
+     * perfeitamente fechado, e o sistema pareceria um dia atrasado sem estar.
+     */
+    const dataDaSessao = periodo.regular?.start
+      ? tradingDate(periodo.regular.start, off)
+      : null;
+
     const bars = [];
 
     result.timestamp.forEach((t, i) => {
@@ -158,9 +175,11 @@ export const yahoo = {
           reconstruida = true;
         }
 
-        // Regra principal: o relogio do mercado manda, mesmo que a barra venha
-        // completa.
-        if (sessaoAberta === true) partial = 1;
+        // Regra principal: a barra esta em formacao quando a sessao esta aberta
+        // E a barra pertence a essa sessao. As duas condicoes, nao uma.
+        if (sessaoAberta === true && (dataDaSessao === null || d === dataDaSessao)) {
+          partial = 1;
+        }
 
         // Rede de seguranca para provedor que nao informa o periodo: se a barra
         // e do dia de hoje no fuso do mercado, trate como em andamento. Errar

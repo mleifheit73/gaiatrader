@@ -83,6 +83,28 @@ ok("minima corrigida para nao furar o fechamento", b3.l <= b3.c && b3.l === 52.5
 ok("barra que furava a faixa fica marcada como em formacao", b3.partial === 1);
 
 // ---------------------------------------------------------------------------
+// 3b. SESSAO ABERTA DE OUTRO DIA NAO CONTAMINA O CANDLE DE ONTEM
+//
+// Com o mercado fechado de madrugada, o Yahoo ja aponta currentTradingPeriod
+// para o pregao SEGUINTE. A versao anterior lia so "existe sessao aberta" e
+// carimbava o candle de ontem, ja encerrado, como em formacao.
+// ---------------------------------------------------------------------------
+const ontem = respostaYahoo({ fimDaSessao: ep("2099-01-01T00:00:00Z"), segundoRegistro: false });
+// A sessao corrente e a de 29/10; a unica barra da resposta e de 28/10.
+ontem.chart.result[0].meta.currentTradingPeriod.regular.start = ep("2026-10-29T13:00:00Z");
+stubFetch(ontem);
+const rOntem = await yahoo.daily("PETR4", "b3", { range: "10y" });
+ok("candle de ontem NAO vira parcial so porque ha sessao aberta hoje",
+   rOntem.bars.at(-1).partial === 0, `d=${rOntem.bars.at(-1).d} partial=${rOntem.bars.at(-1).partial}`);
+
+const hoje = respostaYahoo({ fimDaSessao: ep("2099-01-01T00:00:00Z"), segundoRegistro: false });
+hoje.chart.result[0].meta.currentTradingPeriod.regular.start = t1;   // sessao do proprio dia da barra
+stubFetch(hoje);
+const rHoje = await yahoo.daily("PETR4", "b3", { range: "10y" });
+ok("candle do pregao corrente continua sendo marcado como parcial",
+   rHoje.bars.at(-1).partial === 1);
+
+// ---------------------------------------------------------------------------
 // 4. EVENTOS CORPORATIVOS continuam sendo lidos
 // ---------------------------------------------------------------------------
 const comEventos = respostaYahoo({ fimDaSessao: ep("2026-10-28T20:00:00Z"), segundoRegistro: false });

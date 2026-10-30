@@ -12,7 +12,7 @@
 
 import {
   ingerirLote, quantosFaltam, atualizarUm, inconsistentes, recarregar, rasos,
-  atualizarContagem, lerContagem, ativosComCandles,
+  atualizarContagem, lerContagem, ativosComCandles, atrasados,
 } from "./ingest.js";
 import { estado as estadoLimite, liberar, limparAntigos } from "./limites.js";
 import { ajustar, trechoContinuo, intervaloMaximo } from "./ajuste.js";
@@ -178,10 +178,11 @@ async function rotaBarras(url, env, ctx) {
    * a semana nao vai misturar pregoes dos dois lados de um buraco.
    */
   const pregoesLidos = bars.length;
-  if (periodo !== "dia") {
-    bars = agregar(bars, periodo);
-    if (bars.length > limite) bars = bars.slice(-limite);
-  }
+  if (periodo !== "dia") bars = agregar(bars, periodo);
+  // O corte vale para todos os tempos graficos: o limite pedido e de barras
+  // DEVOLVIDAS. No diario lemos algumas a mais de proposito, para o ajuste e o
+  // corte de trecho continuo terem com o que trabalhar.
+  if (bars.length > limite) bars = bars.slice(-limite);
 
   // ORDEM DOS CAMPOS: TODO O DIAGNOSTICO ANTES DO VETOR DE CANDLES.
   //
@@ -419,6 +420,10 @@ export default {
           // Ativos carregados com menos historico do que o desejado. Foi o
           // defeito que manteve o PETR4 em 2 anos sem ninguem notar.
           historico_raso: await rasos(env.DB),
+          // Ativos um ou mais pregoes atras do resto do mercado deles. A
+          // varredura pode terminar sem falha nenhuma e ainda assim deixar
+          // ativos para tras, quando o provedor nao publicou o dia a tempo.
+          atrasados: await atrasados(env.DB),
           consumo_por_hora: porHora || [],
           ultimas_cargas: cargas || [],
           ativos_com_erro: erros || [],

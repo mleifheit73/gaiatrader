@@ -220,6 +220,21 @@ function render(d) {
         </table>
       </section>` : ""}
 
+    ${(d.atrasados || []).length ? `
+      <section class="painel">
+        <h2>Ativos atrasados</h2>
+        <p class="nota">O último candle destes ativos está atrás do resto do mercado deles.
+          A varredura pode terminar sem falha nenhuma e ainda deixar ativos para trás, quando
+          o provedor não publicou o dia a tempo da leitura. Costuma se resolver sozinho na
+          próxima varredura ou ao abrir o gráfico do ativo.</p>
+        <table>
+          <thead><tr><th>Ativo</th><th>Último candle</th><th>Mercado está em</th></tr></thead>
+          <tbody>${d.atrasados.map((a) => `
+            <tr><td>${esc(a.ticker)}</td><td>${esc(a.ultimo_candle)}</td>
+                <td>${esc(a.mercado_esta_em)}</td></tr>`).join("")}</tbody>
+        </table>
+      </section>` : ""}
+
     ${(d.historico_raso || []).length ? `
       <section class="painel">
         <h2>Histórico raso</h2>
