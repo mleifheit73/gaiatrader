@@ -268,8 +268,6 @@ async function carregar() {
     }
     const d = await r.json();
 
-    moeda = mercado === "cripto" ? "USD" : "BRL";
-
     // As distancias e o stop sao derivados aqui: sao conta de regra de tres
     // sobre numeros que ja vieram, e nao valem uma coluna a mais no banco.
     dados = (d.ativos || []).map((a) => ({
@@ -278,6 +276,10 @@ async function carregar() {
       d5: distancia(a.fechamento, a.mma_curta),
       stop: a.fechamento != null && a.atr != null ? a.fechamento - 2 * a.atr : null,
     }));
+
+    // A moeda vem do proprio ativo. Adivinhar pelo mercado funcionaria hoje,
+    // mas erraria no dia em que entrar um ativo em outra moeda.
+    moeda = dados[0]?.currency || (mercado === "cripto" ? "USD" : "BRL");
 
     const semBase = dados.filter((a) => a.mma_longa == null).length;
     const emFormacao = dados.filter((a) => a.em_formacao).length;
