@@ -372,3 +372,209 @@ export function aFavor(ed, trend, frOk) {
 
 /** Pontuacao maxima alcancavel, que cai para 6 sem a serie do indice. */
 export const PONTUACAO_MAXIMA = 7;
+
+/* ========================================================================
+   ATIVOS DE CONTEXTO
+
+   No artefato esta lista existe para que o indice e o cambio NAO virem
+   linha do scanner. O comentario original e explicito sobre o cambio:
+
+     "a serie diaria do Yahoo para cambio repete a abertura no fechamento
+      (54% dos candles), o que invalida medias, IFR, pivos e a Leitura
+      tecnica. Fica aqui so para nao virar linha do scanner."
+
+   Por isso o Dolar tem `grafico: false`. Ele carrega, serve de contexto, e
+   nao recebe parecer, leitura tecnica nem Situacao.
+   ======================================================================== */
+
+export const CONTEXTO = [
+  { ticker: "^BVSP",     nome: "Ibovespa", grafico: true },
+  { ticker: "USDBRL=X",  nome: "Dólar",    grafico: false },
+];
+
+const CONTEXTO_POR_TICKER = Object.fromEntries(CONTEXTO.map((x) => [x.ticker, x]));
+
+/** O ativo e contexto (indice ou cambio), nao uma linha do scanner. */
+export const ehContexto = (ticker) => !!CONTEXTO_POR_TICKER[ticker];
+
+/* ========================================================================
+   LEITURA TECNICA, classify()
+
+   DIFERENCA DE ARQUITETURA, deliberada e necessaria:
+
+   No artefato, `isCR()` le uma variavel global `MKT`, que e a aba de
+   mercado que o usuario escolheu na tela. Funciona lá porque a tela mostra
+   um mercado por vez. Aqui NAO funciona: a varredura noturna apura os 96
+   ativos numa passada so. Se eu copiasse o global, as 20 criptos seriam
+   avaliadas com a regra das acoes da B3 (forca relativa contra o Ibovespa
+   em vez de preco acima da MM 200) e os numeros sairiam plausiveis e
+   errados, sem erro nenhum na tela.
+
+   Entao `isCR()` virou `alvo.market === "cripto"`, por ativo.
+   ======================================================================== */
+
+/**
+ * Leitura tecnica de um ativo num candle.
+ *
+ * @param alvo   { ticker, market, bars, I } — barras e indicadores do compute()
+ * @param nAt    indice do candle a avaliar; null usa o ultimo
+ * @param opcoes { indice, casas }
+ *               indice: barras do Ibovespa (com campo `d`), ou null
+ *               casas:  casas decimais do plano de risco; 2 e o padrao do
+ *                       artefato e so serve para a B3
+ * @returns null quando nao ha base suficiente para uma leitura honesta
+ */
+export function classify(alvo, nAt = null, opcoes = {}) {
+  const b = alvo.bars, I = alvo.I;
+  const n = nAt == null ? (b ? b.length - 1 : -1) : nAt;
+
+  // Sem base, devolve null em vez de uma leitura fraca. A tela mostra "–".
+  if (!b || n < MINIMO_CANDLES || !I || I.mm80[n] == null || I.mm80[n - 1] == null) return null;
+
+  const ehCripto = alvo.market === "cripto";
+  const ctx = ehContexto(alvo.ticker);
+  const casas = opcoes.casas != null ? opcoes.casas : 2;
+  const indice = opcoes.indice || null;
+
+  const x = b[n], c = x.c, bs = b.slice(0, n + 1);
+
+  const e8 = I.mme8[n], e8p = I.mme8[n - 1];
+  const m80 = I.mm80[n], m80p = I.mm80[n - 1];
+  const e9 = I.ema9[n], e9p = I.ema9[n - 1];
+  const m21 = I.mm21[n], m200 = I.ma200[n];
+
+  // Filtro de tendencia, as quatro condicoes abertas porque a tela as mostra
+  // uma por uma na checklist.
+  const e8up = e8 > e8p, m80up = m80 > m80p;
+  const above8 = c > e8, above80 = c > m80;
+  const ed = e8up && m80up && above8 && above80;
+
+  // Tendencia por pivos confirmados.
+  //
+  // PECULIARIDADE: sao QUATRO valores, nao tres. "indefinida" quando nao ha
+  // dois topos ou dois fundos confirmados. Ela nao bloqueia o favor nem tira
+  // ponto, igual a lateral, mas significa outra coisa: lateral e uma leitura,
+  // indefinida e a ausencia de leitura.
+  const pv = pivots(bs, 2);
+  const T = pv.filter((z) => z.t === "top").slice(-2);
+  const B = pv.filter((z) => z.t === "bot").slice(-2);
+  const trend =
+    T.length < 2 || B.length < 2 ? "indefinida"
+    : T[1].p > T[0].p && B[1].p > B[0].p ? "alta"
+    : T[1].p < T[0].p && B[1].p < B[0].p ? "baixa"
+    : "lateral";
+  const lastTop = T.length ? T[T.length - 1] : null;
+  const lastBot = B.length ? B[B.length - 1] : null;
+
+  // Forca relativa: so para acoes da B3. Cripto e contexto nao tem indice de
+  // comparacao e usam preco acima da MM 200 no lugar, mais abaixo.
+  let fr12 = null, fr3 = null;
+  if (!ehCripto && !ctx && indice) {
+    fr12 = relRet(bs, indice, 252);
+    fr3 = relRet(bs, indice, 63);
+  }
+  const frOk = fr12 == null ? null : fr12 > 0;
+
+  const favor = aFavor(ed, trend, frOk);
+
+  // ATR da leitura: igual ao do artefato, media aritmetica de 14 true ranges
+  // fixos de n-13 a n. Nao precisa de guarda porque n >= 85 aqui.
+  let atr = 0;
+  for (let i = n - 13; i <= n; i++) {
+    atr += Math.max(b[i].h - b[i].l, Math.abs(b[i].h - b[i - 1].c), Math.abs(b[i].l - b[i - 1].c));
+  }
+  atr /= 14;
+
+  const allSg = signals(bs, I, casas);
+  const sg = allSg.filter((z) => z.i === n)[0] || null;
+
+  let entry = null, stop = null, target = null, rr = null, stopAtr = null;
+  let riskOk = false, refStop = false;
+  if (sg) {
+    entry = sg.entry; stop = sg.stop; target = sg.target;
+    refStop = !sg.structural;
+    const risco = entry - stop;
+    stopAtr = atr ? risco / atr : null;
+    rr = risco > 0 ? (target - entry) / risco : null;
+    riskOk = stopAtr != null && stopAtr <= 3;
+  }
+
+  const ifr2 = I.ifr2[n], ifr14 = I.rsi[n];
+  const volR = I.vma[n] ? x.v / I.vma[n] : null;
+
+  const lab = situacao(favor, !!sg, riskOk);
+  const sc = pontuacao({
+    ed, trend, frOk,
+    acimaM200: m200 != null ? c > m200 : null,
+    temSinal: !!sg, riskOk,
+  });
+
+  /* ---- Checklist do filtro de tendencia ---------------------------------
+     Quatro itens sempre, mais um quinto so para acoes da B3. O rotulo do
+     quinto avisa "(carregando)" quando o Ibovespa ainda nao chegou, em vez
+     de mostrar um X que pareceria uma reprovacao do ativo.               */
+  const checksF = [
+    ["MME 8 subindo", e8up],
+    ["MM 80 subindo", m80up],
+    ["Preço acima da MME 8 e da MM 80", above8 && above80],
+    ["Pivôs em alta (topos e fundos mais altos)", trend === "alta"],
+  ];
+  if (!ehCripto && !ctx) {
+    checksF.push([
+      "Mais forte que o Ibovespa em 12 meses" + (fr12 == null ? " (carregando)" : ""),
+      frOk === true,
+    ]);
+  }
+
+  /* ---- Checklist de gatilho e risco -------------------------------------
+     O volume entra na TERCEIRA posicao, antes do IFR 14, e so quando o ativo
+     tem algum volume nos ultimos 20 candles. Ativo sem volume publicado nao
+     ganha um item reprovado por falta de dado.                            */
+  const checksG = [
+    ["Candle sinal no último candle (9.1, 9.2, 9.3 ou PFR)", !!sg],
+    ["Stop no último fundo (pivô) abaixo da entrada", !!sg && !refStop],
+    ["Stop de até 3 ATR da entrada", !!sg && stopAtr != null && stopAtr <= 3],
+    ["IFR 14 entre 40 e 70 (médio prazo saudável)", ifr14 != null && ifr14 >= 40 && ifr14 <= 70],
+  ];
+  if (b.slice(-20).some((z) => z.v > 0)) {
+    checksG.splice(3, 0, ["Volume do último candle acima da média de 20", volR != null && volR > 1]);
+  }
+
+  /* ---- Barras de curto e medio prazo (0 a 5) ---------------------------- */
+  const r2 = I.ifr2;
+  const m200ok = m200 != null && c > m200;
+
+  const cpL = [
+    ["MME 9 subindo", e9 > e9p],
+    ["Preço acima da MME 9", c > e9],
+    ["Preço acima da MM 21", m21 != null && c > m21],
+    ["IFR 2 saindo da sobrevenda ou subindo sem passar de 75",
+      (r2[n] >= 25 && [n - 1, n - 2, n - 3].some((k) => r2[k] != null && r2[k] < 25))
+      || (r2[n] > r2[n - 1] && r2[n] <= 75)],
+    ["Candle sinal nos últimos 3 pregões", allSg.some((z) => z.i >= n - 2)],
+  ];
+
+  const mpL = [
+    ["MME 8 subindo com o preço acima dela", e8up && above8],
+    ["MM 80 subindo com o preço acima dela", m80up && above80],
+    ["Pivôs em alta", trend === "alta"],
+    ["IFR 14 entre 40 e 70", ifr14 != null && ifr14 >= 40 && ifr14 <= 70],
+    (ehCripto || ctx)
+      ? ["Preço acima da MM 200", m200ok]
+      : ["Mais forte que o Ibovespa em 12 meses", frOk === true],
+  ];
+
+  const cpN = cpL.filter((z) => z[1]).length;
+  const mpN = mpL.filter((z) => z[1]).length;
+
+  return {
+    cpL, mpL, cpN, mpN, n, x, c,
+    e8, e8up, m80, m80up, above8, above80, ed,
+    e9, e9up: e9 > e9p, m21, m200,
+    trend, lastTop, lastBot, T, B,
+    fr12, fr3, frOk, favor,
+    atr, sg, entry, stop, refStop, target, rr, stopAtr, riskOk,
+    ifr2, ifr14, volR,
+    lab, sc, checksF, checksG,
+  };
+}

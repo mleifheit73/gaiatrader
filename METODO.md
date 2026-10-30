@@ -40,8 +40,20 @@ close    > MM80[i]
 ou igual às N posteriores; fundo pelo espelho com as mínimas.
 **Só confirmados**, porque exige N candles depois. Os sinais usam N = 2.
 
-A tendência por pivôs (alta, baixa, lateral) compara os dois últimos
-topos e os dois últimos fundos.
+A tendência por pivôs compara os dois últimos topos e os dois últimos
+fundos, e tem **quatro** valores, não três:
+
+| Valor | Quando |
+|---|---|
+| `alta` | último topo acima do anterior **e** último fundo acima do anterior |
+| `baixa` | último topo abaixo do anterior **e** último fundo abaixo do anterior |
+| `lateral` | qualquer outra combinação com dois topos e dois fundos |
+| `indefinida` | menos de dois topos **ou** menos de dois fundos confirmados |
+
+`indefinida` e `lateral` pesam igual na Pontuação (zero) e nenhuma das duas
+bloqueia o favor, mas significam coisas diferentes: lateral é uma leitura,
+indefinida é a ausência de leitura. Uma série que só sobe, sem recuo, não
+tem pivô nenhum e cai em `indefinida`.
 
 ## Candle sinal, `signals()`
 
@@ -94,16 +106,31 @@ Evitar   = sem favor  e  sem candle sinal
 + (riskOk ? 1 : 0)
 ```
 
-Máximo 7, mínimo -5. A tela mostra "0 de 7".
+Máximo 7, mínimo -5. A tela mostra "de 7" e posiciona o medidor em
+`(sc + 5) / 12 * 100`, para que o negativo tenha onde aparecer sem virar
+número negativo em tela.
+
+Sem a série do Ibovespa, o terceiro termo é sempre zero para as ações da
+B3, então o **máximo real cai para 6**.
 
 ## Checklists exibidas
 
-**Filtro de tendência:** MME 8 subindo · MM 80 subindo · preço acima das
-duas · pivôs em alta · mais forte que o Ibovespa em 12 meses.
+**Filtro de tendência (4 ou 5 itens):** MME 8 subindo · MM 80 subindo ·
+preço acima das duas · pivôs em alta · *(só ações da B3)* mais forte que o
+Ibovespa em 12 meses.
 
-**Gatilho e risco:** candle sinal no último candle · stop no último fundo
-abaixo da entrada · stop de até 3 ATR · volume acima da média de 20 ·
-IFR 14 entre 40 e 70.
+O quinto item só existe para ações da B3. Cripto e ativos de contexto não
+têm índice de comparação e ficam com quatro. Quando o Ibovespa ainda não
+carregou, o rótulo do quinto vira **"Mais forte que o Ibovespa em 12 meses
+(carregando)"**, em vez de mostrar um X que pareceria reprovação do ativo.
+
+**Gatilho e risco (4 ou 5 itens):** candle sinal no último candle · stop no
+último fundo abaixo da entrada · stop de até 3 ATR · *(condicional)* volume
+acima da média de 20 · IFR 14 entre 40 e 70.
+
+O item de volume entra na **quarta** posição, antes do IFR 14, e só quando o
+ativo teve algum volume nos últimos 20 candles. Ativo sem volume publicado
+não ganha um item reprovado por falta de dado.
 
 **Barra Curto prazo (0 a 5):** MME 9 subindo · preço acima da MME 9 ·
 preço acima da MM 21 · IFR 2 saindo da sobrevenda (>=25 tendo estado <25
@@ -141,3 +168,75 @@ razão ação/índice em base 100 e tem média de 21.
 
 A tela, que segue o padrão do artefato, e os textos da leitura técnica,
 que estão no código do artefato e devem ser portados literalmente.
+
+## Correções após ler o código literal
+
+Este documento foi escrito primeiro a partir das telas e de uma leitura
+parcial. Depois eu extraí o `classify()` literal do artefato (linhas 1295 a
+1327) e ele contradisse o que eu tinha anotado em quatro pontos, todos já
+corrigidos acima: a tendência tem quatro valores e não três, as duas
+checklists têm tamanho variável, o rótulo do quinto item do filtro avisa
+quando o índice não carregou, e a Pontuação tem um medidor próprio.
+
+Fica o registro porque o padrão se repete neste projeto: **resumo não serve
+para portar.** Cada vez que eu deduzi em vez de ler o código, produzi
+números plausíveis para a pergunta errada.
+
+### Diferença de arquitetura, deliberada
+
+No artefato, `isCR()` lê a variável global `MKT`, que é a aba de mercado que
+o usuário escolheu na tela. Funciona lá porque a tela mostra um mercado por
+vez. **Aqui não funciona:** a varredura noturna apura os 96 ativos numa
+passada só. Copiar o global faria as 20 criptos serem avaliadas com a regra
+das ações (força relativa contra o Ibovespa em vez de preço acima da MM 200),
+e os números sairiam plausíveis e errados, sem erro nenhum em tela.
+
+No porte, `isCR()` virou `alvo.market === "cripto"`, por ativo. Há teste
+afirmando que as mesmas barras produzem checklists diferentes conforme o
+mercado do ativo.
+
+### Ativos de contexto
+
+O artefato mantém uma lista de dois ativos que existem para **não** virar
+linha do scanner:
+
+| Ticker | Nome | Gráfico |
+|---|---|---|
+| `^BVSP` | Ibovespa | sim |
+| `USDBRL=X` | Dólar | **não** |
+
+O comentário original do artefato explica o Dólar: a série diária do Yahoo
+para câmbio repete a abertura no fechamento em 54% dos candles, o que
+invalida médias, IFR, pivôs e a leitura técnica. Ele carrega, serve de
+contexto, e não recebe parecer nem Situação.
+
+### Textos da conclusão, para portar literalmente
+
+São o que o painel de leitura técnica imprime. Nenhum deles promete
+desempenho, e os quatro mencionam explicitamente que não são recomendação
+ou dizem o que fazer se o usuário operar contra:
+
+**Setup:** "filtro a favor, gatilho presente e risco adequado. Não é
+recomendação de compra: significa que o plano está completo, com entrada,
+stop e alvo definidos. A entrada só vale se o preço romper `<entrada>`; sem
+rompimento, não há operação."
+
+**Observar, com gatilho:** "a tendência está a favor e há gatilho, mas o
+stop no último fundo fica longe demais (mais de 3 ATR da entrada)."
+
+**Observar, sem gatilho:** "a tendência está a favor, mas não há gatilho no
+último candle. Aguarde um candle sinal (9.1, 9.2, 9.3 ou PFR)."
+
+**Risco:** "há candle sinal, mas o filtro de tendência está contra. Comprar
+aqui é operar contra a tendência; se operar, use posição menor e respeite o
+stop."
+
+**Evitar:** "filtro de tendência contra e sem gatilho. Não é momento de
+compra."
+
+### Ainda não portado
+
+`relStrength(bars, indice)`, que normaliza a razão ação sobre índice em base
+100 com média de 21. Ela alimenta só o painel de gráfico "Força contra o
+Ibovespa", não o `classify()`, então fica para quando o gráfico for
+construído.

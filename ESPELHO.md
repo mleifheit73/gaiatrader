@@ -82,8 +82,8 @@ Especificação completa em `METODO.md`.
 | Candles sinal 9.1, 9.2, 9.3, PFR | **portado** (`src/metodo.js`, não ligado) |
 | Plano de risco (entrada, stop, alvo) | **portado** (`src/metodo.js`, não ligado) |
 | Força relativa 12m e 3m | **portado** (`src/metodo.js`, não ligado); falta a série do Ibovespa |
-| Situação e Pontuação | **a fazer** |
-| Barras Curto e Médio prazo | **a fazer** |
+| Situação e Pontuação | **portado** (`src/metodo.js`, não ligado) |
+| Barras Curto e Médio prazo | **portado** (`src/metodo.js`, não ligado) |
 | Liquidez (financeiro 21 dias) | feito |
 
 > **Resolvido.** Eu havia tratado como resíduo os **dois** conjuntos de

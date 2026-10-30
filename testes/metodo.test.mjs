@@ -8,7 +8,7 @@
 import {
   sma, ema, smaN, rsi, stoch, macd, boll, obv, psar,
   pivots, eden, riskPlan, signals, relRet, compute,
-  situacao, pontuacao, aFavor,
+  situacao, pontuacao, aFavor, classify, ehContexto, CONTEXTO, MINIMO_CANDLES,
 } from "../src/metodo.js";
 
 let falhas = 0;
@@ -344,6 +344,187 @@ function ok(nome, cond, extra = "") {
      aFavor(true, "alta", null) === true,
      "senao a tela ficaria sem nenhum Setup enquanto o Ibovespa nao carregar");
   ok("forca relativa mais fraca bloqueia o favor", aFavor(true, "alta", false) === false);
+}
+
+/* ======================================================================== */
+/* LEITURA TECNICA, classify()                                              */
+/* ======================================================================== */
+
+const serie = (n, fn) => Array.from({ length: n }, (_, i) => {
+  const c = fn(i);
+  return { d: `d${String(i).padStart(4, "0")}`, o: c, h: c + 1, l: c - 1, c, v: 1000 + (i % 7) * 100 };
+});
+
+/* Alta longa e limpa com um recuo de tres candles no fim, que arma um 9.1. */
+const altaComRecuo = (() => {
+  const p = [];
+  for (let i = 0; i < 310; i++) p.push(100 + i * 0.4 + 3 * Math.sin(i / 9));
+  const base = p[p.length - 1];
+  p.push(base - 2, base - 3.5, base - 1);
+  return p.map((c, i) => ({ d: `d${String(i).padStart(4, "0")}`, o: c, h: c + 0.5, l: c - 0.5, c, v: 1000 }));
+})();
+const I_RECUO = compute(altaComRecuo);
+
+/* ---- Guardas de base insuficiente --------------------------------------- */
+
+{
+  const curta = serie(50, (i) => 100 + i);
+  ok("classify devolve null com menos de 85 candles",
+     classify({ ticker: "T3", market: "acao", bars: curta, I: compute(curta) }) === null);
+
+  const sem80 = serie(90, (i) => 100 + i);
+  const I = compute(sem80);
+  ok("classify devolve null quando falta MM 80 no candle avaliado",
+     classify({ ticker: "T3", market: "acao", bars: sem80, I }, 80) === null);
+
+  ok("o minimo de candles e 85", MINIMO_CANDLES === 85);
+}
+
+/* ---- Tendencia por pivos: QUATRO valores -------------------------------- */
+
+{
+  const mono = serie(140, (i) => 100 + i);
+  const K = classify({ ticker: "T3", market: "acao", bars: mono, I: compute(mono) });
+  ok("serie monotonica nao tem pivos, logo tendencia INDEFINIDA",
+     K.trend === "indefinida", `veio ${K.trend}`);
+  ok("tendencia indefinida nao bloqueia o favor", K.favor === true);
+  ok("tendencia indefinida nao tira ponto, igual a lateral", K.sc === 2, `veio ${K.sc}`);
+}
+
+{
+  const zig = serie(140, (i) => 100 + i * 0.6 + 8 * Math.sin(i / 2.5));
+  const Ka = classify({ ticker: "T3", market: "acao", bars: zig, I: compute(zig) });
+  ok("zigzag com deriva de alta da tendencia alta", Ka.trend === "alta", `veio ${Ka.trend}`);
+
+  const baixa = serie(140, (i) => 200 - i * 0.6 + 8 * Math.sin(i / 2.5));
+  const Kb = classify({ ticker: "T3", market: "acao", bars: baixa, I: compute(baixa) });
+  ok("zigzag com deriva de baixa da tendencia baixa", Kb.trend === "baixa", `veio ${Kb.trend}`);
+
+  const lat = serie(140, (i) => 150 + 8 * Math.sin(i / 2.5));
+  const Kl = classify({ ticker: "T3", market: "acao", bars: lat, I: compute(lat) });
+  ok("oscilacao sem deriva da tendencia lateral", Kl.trend === "lateral", `veio ${Kl.trend}`);
+}
+
+/* ---- Setup: o estado que mais importa ----------------------------------- */
+
+{
+  const K = classify({ ticker: "PETR4", market: "acao", bars: altaComRecuo, I: I_RECUO });
+  ok("alta com recuo chega a Setup", K.lab === "Setup", `veio ${K.lab}`);
+  ok("o Setup tem candle sinal identificado", K.sg && K.sg.L.includes("9.1"),
+     K.sg ? K.sg.L.join(",") : "sem sinal");
+  ok("o Setup tem entrada, stop e alvo", K.entry > 0 && K.stop > 0 && K.target > K.entry);
+  ok("a relacao risco retorno do metodo e 2 para 1", quase(K.rr, 2), `veio ${K.rr}`);
+  ok("o Setup respeita o limite de 3 ATR", K.stopAtr <= 3 && K.riskOk === true,
+     `stopAtr ${K.stopAtr}`);
+}
+
+{
+  // O candle anterior ao recuo ja estava a favor, mas sem gatilho: Observar.
+  const K = classify({ ticker: "PETR4", market: "acao", bars: altaComRecuo, I: I_RECUO }, 309);
+  ok("favor sem gatilho e Observar, nao Setup", K.lab === "Observar" && !K.sg, `veio ${K.lab}`);
+}
+
+/* ---- Forca relativa: so acoes da B3, e o que ela muda ------------------- */
+
+{
+  const semIndice = classify({ ticker: "PETR4", market: "acao", bars: altaComRecuo, I: I_RECUO });
+  ok("sem indice, fr12 e frOk ficam nulos",
+     semIndice.fr12 === null && semIndice.frOk === null);
+  ok("sem indice, a pontuacao do Setup cheio para em 5", semIndice.sc === 5, `veio ${semIndice.sc}`);
+
+  const idxFraco = altaComRecuo.map((b, i) => ({ d: b.d, c: 100 + i * 0.1 }));
+  const comIndice = classify({ ticker: "PETR4", market: "acao", bars: altaComRecuo, I: I_RECUO },
+                             null, { indice: idxFraco });
+  ok("com indice e acao mais forte, frOk vira true", comIndice.frOk === true,
+     `fr12 ${comIndice.fr12}`);
+  ok("carregar o indice soma um ponto", comIndice.sc === semIndice.sc + 1,
+     `${semIndice.sc} -> ${comIndice.sc}`);
+  ok("fr3 tambem e calculado", comIndice.fr3 !== null);
+}
+
+{
+  // Indice mais forte que a acao: frOk false DERRUBA o favor, e um Setup
+  // perfeito vira Risco. E a prova de que a quinta condicao do filtro morde.
+  const idxForte = altaComRecuo.map((b, i) => ({ d: b.d, c: 100 + i * 2 }));
+  const K = classify({ ticker: "PETR4", market: "acao", bars: altaComRecuo, I: I_RECUO },
+                     null, { indice: idxForte });
+  ok("acao mais fraca que o indice perde o favor", K.frOk === false && K.favor === false);
+  ok("Setup com filtro contra e rebaixado para Risco", K.lab === "Risco", `veio ${K.lab}`);
+  ok("o candle sinal continua la, so o contexto mudou", !!K.sg);
+}
+
+/* ---- A diferenca de arquitetura: mercado por ATIVO, nao global ---------- */
+
+{
+  const acao = classify({ ticker: "PETR4", market: "acao", bars: altaComRecuo, I: I_RECUO });
+  const cripto = classify({ ticker: "BTC", market: "cripto", bars: altaComRecuo, I: I_RECUO });
+  const indice = classify({ ticker: "^BVSP", market: "indice", bars: altaComRecuo, I: I_RECUO });
+
+  ok("acao da B3 tem 5 itens no filtro de tendencia", acao.checksF.length === 5);
+  ok("cripto tem 4 itens: nao ha indice para comparar", cripto.checksF.length === 4);
+  ok("ativo de contexto tem 4 itens", indice.checksF.length === 4);
+
+  ok("acao da B3 usa forca relativa no medio prazo",
+     acao.mpL[4][0] === "Mais forte que o Ibovespa em 12 meses");
+  ok("cripto usa preco acima da MM 200 no lugar",
+     cripto.mpL[4][0] === "Preço acima da MM 200", cripto.mpL[4][0]);
+  ok("contexto usa preco acima da MM 200 no lugar",
+     indice.mpL[4][0] === "Preço acima da MM 200");
+  ok("cripto nunca calcula forca relativa", cripto.fr12 === null && cripto.frOk === null);
+}
+
+/* ---- Rotulo que avisa em vez de reprovar -------------------------------- */
+
+{
+  const K = classify({ ticker: "PETR4", market: "acao", bars: altaComRecuo, I: I_RECUO });
+  ok('sem indice, o 5o item do filtro avisa "(carregando)"',
+     K.checksF[4][0].endsWith(" (carregando)"), K.checksF[4][0]);
+
+  const idx = altaComRecuo.map((b, i) => ({ d: b.d, c: 100 + i * 0.1 }));
+  const K2 = classify({ ticker: "PETR4", market: "acao", bars: altaComRecuo, I: I_RECUO },
+                      null, { indice: idx });
+  ok("com indice, o aviso sai do rotulo",
+     K2.checksF[4][0] === "Mais forte que o Ibovespa em 12 meses", K2.checksF[4][0]);
+}
+
+/* ---- Checklist de gatilho: o volume condicional ------------------------- */
+
+{
+  const comVol = classify({ ticker: "PETR4", market: "acao", bars: altaComRecuo, I: I_RECUO });
+  ok("com volume, o gatilho tem 5 itens", comVol.checksG.length === 5);
+  ok("o volume entra ANTES do IFR 14",
+     comVol.checksG[3][0].startsWith("Volume") && comVol.checksG[4][0].startsWith("IFR 14"),
+     comVol.checksG.map((z) => z[0].slice(0, 12)).join(" | "));
+
+  const semVol = altaComRecuo.map((b) => ({ ...b, v: 0 }));
+  const K = classify({ ticker: "XPTO3", market: "acao", bars: semVol, I: compute(semVol) });
+  ok("ativo sem volume publicado nao ganha item reprovado por falta de dado",
+     K.checksG.length === 4 && !K.checksG.some((z) => z[0].startsWith("Volume")));
+}
+
+/* ---- Contagem das barras ------------------------------------------------ */
+
+{
+  const K = classify({ ticker: "PETR4", market: "acao", bars: altaComRecuo, I: I_RECUO });
+  ok("cpL e mpL tem 5 itens cada", K.cpL.length === 5 && K.mpL.length === 5);
+  ok("cpN conta os itens cumpridos de cpL", K.cpN === K.cpL.filter((z) => z[1]).length);
+  ok("mpN conta os itens cumpridos de mpL", K.mpN === K.mpL.filter((z) => z[1]).length);
+  ok("cpN e mpN ficam entre 0 e 5",
+     K.cpN >= 0 && K.cpN <= 5 && K.mpN >= 0 && K.mpN <= 5, `cpN ${K.cpN} mpN ${K.mpN}`);
+}
+
+/* ---- Ativos de contexto ------------------------------------------------- */
+
+{
+  ok("o Ibovespa e ativo de contexto", ehContexto("^BVSP") === true);
+  ok("o Dolar e ativo de contexto", ehContexto("USDBRL=X") === true);
+  ok("uma acao nao e contexto", ehContexto("PETR4") === false);
+
+  const dolar = CONTEXTO.find((x) => x.ticker === "USDBRL=X");
+  ok("o Dolar nao tem grafico: a serie de cambio do Yahoo repete abertura no fechamento",
+     dolar.grafico === false);
+  const ibov = CONTEXTO.find((x) => x.ticker === "^BVSP");
+  ok("o Ibovespa tem grafico", ibov.grafico === true);
 }
 
 console.log(falhas === 0 ? "\nTODOS OS TESTES PASSARAM" : `\n${falhas} TESTE(S) FALHARAM`);
