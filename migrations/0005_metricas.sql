@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS asset_metrics (
   -- Erro da ultima tentativa, quando houve. Leitura que falha em silencio
   -- deixaria a tela mostrando numero velho como se fosse de hoje.
   erro         TEXT,
-  calculado_em TEXT NOT NULL,
+  calculado_em TEXT NOT NULL DEFAULT (datetime('now')),
   PRIMARY KEY (ticker, periodo)
 ) WITHOUT ROWID;
 

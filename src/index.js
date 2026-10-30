@@ -500,8 +500,15 @@ export default {
         if (check !== "ok") return erro("nao autorizado", check === "sem_segredo_no_servidor" ? 503 : 401);
 
         const n = parseInt(url.searchParams.get("lote") || "10", 10);
-        const resumo = await apurarLote(env.DB, { lote: Number.isFinite(n) ? n : 10 });
-        return json({ ...resumo, faltam_apurar: await faltamApurar(env.DB) });
+        try {
+          const resumo = await apurarLote(env.DB, { lote: Number.isFinite(n) ? n : 10 });
+          return json({ ...resumo, faltam_apurar: await faltamApurar(env.DB) });
+        } catch (e) {
+          // Rota de administracao ja exige segredo, entao mostrar o erro de
+          // verdade nao vaza nada para estranho e poupa horas de diagnostico.
+          // "Erro interno" aqui ja escondeu duas causas diferentes em dois dias.
+          return erro(String(e?.message || e).slice(0, 400), 500);
+        }
       }
 
       if (rota === "/api/admin/liberar" && request.method === "POST") {

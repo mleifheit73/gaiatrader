@@ -95,11 +95,22 @@ const COLUNAS = 13;
 const LINHAS_POR_COMANDO = 7;   // 7 x 13 = 91 parametros, sob o limite de 100 do D1
 
 function montarInsert(n) {
-  const tupla = "(" + new Array(COLUNAS).fill("?").join(",") + ")";
+  /*
+   * calculado_em entra como expressao, nao como parametro.
+   *
+   * A coluna e NOT NULL e a primeira versao simplesmente nao a preenchia: toda
+   * gravacao falhava na restricao do banco. O teste nao pegou porque o banco
+   * falso dos testes exercita a logica, nao o esquema.
+   *
+   * Pondo datetime('now') direto no comando, a coluna fica garantida sem gastar
+   * nenhum dos 100 parametros que o D1 permite.
+   */
+  const tupla = "(" + new Array(COLUNAS).fill("?").join(",") + ",datetime('now'))";
   return (
     `INSERT INTO asset_metrics
        (ticker, periodo, d, base, fechamento, mma_curta, mma_longa,
-        ifr_curto, ifr_longo, atr, liquidez, em_formacao, cortado_em) VALUES ` +
+        ifr_curto, ifr_longo, atr, liquidez, em_formacao, cortado_em,
+        calculado_em) VALUES ` +
     new Array(n).fill(tupla).join(",") +
     ` ON CONFLICT(ticker, periodo) DO UPDATE SET
         d = excluded.d, base = excluded.base, fechamento = excluded.fechamento,

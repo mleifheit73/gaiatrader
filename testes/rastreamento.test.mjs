@@ -109,6 +109,24 @@ ok("nenhum comando passa de 100 parametros",
    `maior foi ${Math.max(...db1.gravadas.map((g) => g.parametros))}`);
 
 // ---------------------------------------------------------------------------
+// 2b. O COMANDO PRECISA PREENCHER AS COLUNAS OBRIGATORIAS
+//
+// A primeira versao nao preenchia calculado_em, que e NOT NULL, e toda gravacao
+// falhava na restricao do banco. O banco falso daqui exercita a logica, nao o
+// esquema, entao o teste precisa olhar o proprio comando gerado.
+// ---------------------------------------------------------------------------
+const sqlVistos = [];
+const dbSql = bancoFalso({ ativos: [{ ticker: "GGGG3", market: "b3" }], candles: { GGGG3: serie(300) } });
+const prepareOriginal = dbSql.prepare.bind(dbSql);
+dbSql.prepare = (sql) => { sqlVistos.push(sql); return prepareOriginal(sql); };
+await apurarLote(dbSql, { lote: 1, periodos: ["dia"] });
+
+const insert = sqlVistos.find((q) => q.includes("INSERT INTO asset_metrics") && q.includes("VALUES"));
+ok("o comando de insercao preenche calculado_em", /calculado_em/.test(insert));
+ok("calculado_em entra como expressao, sem gastar parametro",
+   /datetime\('now'\)\)/.test(insert));
+
+// ---------------------------------------------------------------------------
 // 3. A APURACAO USA A SERIE AJUSTADA, SEMPRE
 // Um provento no meio da serie tem que mudar a media longa. Se nao mudar, o
 // ajuste nao esta sendo aplicado.
