@@ -74,23 +74,29 @@ Especificação completa em `METODO.md`.
 
 | Item | Status |
 |---|---|
-| MME 8, MME 9, MM 21, MM 80, MM 200 | **a fazer** (hoje: MMA 5 e MMA 200, conjunto errado) |
+| MME 8, MME 9, MM 21, MM 80, MM 200 | **portado** (`src/metodo.js`, não ligado) |
 | IFR 2 e IFR 14 | feito |
-| ATR 14 | **parcial** (hoje Wilder; o artefato usa média aritmética) |
-| Bollinger, Estocástico, MACD, OBV, SAR | **a fazer** |
-| Pivôs confirmados | **a fazer** |
-| Candles sinal 9.1, 9.2, 9.3, PFR | **a fazer** |
-| Plano de risco (entrada, stop, alvo) | **a fazer** |
-| Força relativa 12m e 3m | **a fazer**, bloqueado pelo Ibovespa |
+| ATR 14 | **portado** (`src/metodo.js`, não ligado), média aritmética |
+| Bollinger, Estocástico, MACD, OBV, SAR | **portado** (`src/metodo.js`, não ligado) |
+| Pivôs confirmados | **portado** (`src/metodo.js`, não ligado) |
+| Candles sinal 9.1, 9.2, 9.3, PFR | **portado** (`src/metodo.js`, não ligado) |
+| Plano de risco (entrada, stop, alvo) | **portado** (`src/metodo.js`, não ligado) |
+| Força relativa 12m e 3m | **portado** (`src/metodo.js`, não ligado); falta a série do Ibovespa |
 | Situação e Pontuação | **a fazer** |
 | Barras Curto e Médio prazo | **a fazer** |
 | Liquidez (financeiro 21 dias) | feito |
 
-> **Resíduo encontrado:** existem **dois** conjuntos de checklist curto e
-> médio prazo no código. Um dentro de `compute()` (RSI, Estocástico,
-> MACD, SAR, Bollinger) e outro dentro de `classify()` (MME 9, MM 21,
-> IFR 2). **A tabela usa o segundo.** O primeiro parece ser de uma versão
-> anterior e não aparece em tela. Confirmar antes de portar os dois.
+> **Resolvido.** Eu havia tratado como resíduo os **dois** conjuntos de
+> checklist curto e médio prazo do código: um dentro de `compute()` (RSI,
+> Estocástico, MACD, SAR, Bollinger) e outro dentro de `classify()`
+> (MME 9, MM 21, IFR 2). Estava errado. A tela do seletor de indicadores
+> mostra que o primeiro conjunto são camadas que o usuário liga e desliga
+> no gráfico. **Os dois ficam.** A tabela do scanner usa o segundo.
+
+> **Estado do porte:** `src/metodo.js` existe, tem 46 testes e passa, mas
+> **nada o importa ainda**. A apuração noturna continua rodando sobre
+> `src/indicadores.js`. A troca é uma etapa própria, depois que o
+> `classify()` estiver portado e o Ibovespa carregado.
 
 ### Telas
 

@@ -314,3 +314,61 @@ export function compute(b) {
 
 /** Minimo de candles para a leitura tecnica existir. */
 export const MINIMO_CANDLES = 85;
+
+/* ========================================================================
+   VEREDITO
+
+   As duas funcoes abaixo sao as regras de decisao, isoladas de proposito.
+   Elas nao leem barras nem indicadores: recebem os sinalizadores ja
+   apurados e devolvem a Situacao e a Pontuacao. Isoladas assim, dao para
+   testar contra a especificacao do METODO.md sem montar uma serie inteira,
+   e a tabela de verdade fica legivel.
+   ======================================================================== */
+
+/**
+ * Situacao do ativo.
+ *
+ *   Setup     favor, com candle sinal e com risco aceitavel
+ *   Observar  favor, mas sem sinal OU com stop a mais de 3 ATR
+ *   Risco     sem favor, mas com candle sinal (o sinal existe, o contexto nao ajuda)
+ *   Evitar    sem favor e sem sinal
+ */
+export function situacao(favor, temSinal, riskOk) {
+  if (favor) return temSinal && riskOk ? "Setup" : "Observar";
+  return temSinal ? "Risco" : "Evitar";
+}
+
+/**
+ * Pontuacao de 0 a 7 na tela. O calculo vai de -5 a 7; a tela nao mostra
+ * negativo porque Situacao "Evitar" ja comunica isso.
+ *
+ * PECULIARIDADE: forca relativa DESCONHECIDA (null) vale zero, nao -1. Nao
+ * saber nao e o mesmo que estar mais fraco. E e por isso que, sem a serie do
+ * Ibovespa, a pontuacao maxima real cai de 7 para 6.
+ */
+export function pontuacao({ ed, trend, frOk, acimaM200, temSinal, riskOk }) {
+  let p = 0;
+  p += ed ? 2 : -2;
+  p += trend === "alta" ? 1 : trend === "baixa" ? -1 : 0;
+  p += frOk == null ? 0 : frOk ? 1 : -1;
+  p += acimaM200 == null ? 0 : acimaM200 ? 1 : -1;
+  p += temSinal ? 1 : 0;
+  p += riskOk ? 1 : 0;
+  return p;
+}
+
+/**
+ * Favor: o filtro de tendencia esta do nosso lado.
+ *
+ * PECULIARIDADE: forca relativa desconhecida NAO bloqueia. A condicao e
+ * `frOk !== false`, nao `frOk === true`. Enquanto o Ibovespa nao estiver
+ * carregado, frOk e null para as acoes da B3, e elas continuam podendo ser
+ * Setup. Se isso fosse `=== true`, a tela ficaria sem nenhum Setup e
+ * pareceria quebrada sem dar erro.
+ */
+export function aFavor(ed, trend, frOk) {
+  return ed && trend !== "baixa" && frOk !== false;
+}
+
+/** Pontuacao maxima alcancavel, que cai para 6 sem a serie do indice. */
+export const PONTUACAO_MAXIMA = 7;

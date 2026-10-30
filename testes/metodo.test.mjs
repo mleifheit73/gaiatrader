@@ -8,6 +8,7 @@
 import {
   sma, ema, smaN, rsi, stoch, macd, boll, obv, psar,
   pivots, eden, riskPlan, signals, relRet, compute,
+  situacao, pontuacao, aFavor,
 } from "../src/metodo.js";
 
 let falhas = 0;
@@ -272,6 +273,77 @@ function ok(nome, cond, extra = "") {
   })());
   ok("pivots aguenta serie menor que a janela", pivots([{ h: 1, l: 1 }], 2).length === 0);
   ok("psar aguenta serie de duas barras", psar([1, 2], [1, 2]).v.length === 2);
+}
+
+/* ---- Situacao: tabela de verdade completa ------------------------------- */
+
+{
+  // Quatro situacoes, oito combinacoes. Escrito a partir do METODO.md, nao
+  // do codigo, para que especificacao e porte se confiram um ao outro.
+  const casos = [
+    // favor  sinal  riskOk  esperado
+    [true,    true,  true,   "Setup"],
+    [true,    true,  false,  "Observar"], // sinal existe mas o stop e largo
+    [true,    false, true,   "Observar"],
+    [true,    false, false,  "Observar"],
+    [false,   true,  true,   "Risco"],    // sem favor, o sinal nao promove
+    [false,   true,  false,  "Risco"],
+    [false,   false, true,   "Evitar"],
+    [false,   false, false,  "Evitar"],
+  ];
+  let erros = 0;
+  for (const [favor, sinal, risco, esperado] of casos) {
+    const veio = situacao(favor, sinal, risco);
+    if (veio !== esperado) {
+      erros++;
+      console.log(`   favor=${favor} sinal=${sinal} riskOk=${risco}: esperado ${esperado}, veio ${veio}`);
+    }
+  }
+  ok("situacao cobre as 8 combinacoes da tabela de verdade", erros === 0);
+  ok("riskOk nunca promove para Setup sem sinal", situacao(true, false, true) === "Observar");
+  ok("sinal nunca promove para Setup sem favor", situacao(false, true, true) === "Risco");
+}
+
+/* ---- Pontuacao ---------------------------------------------------------- */
+
+{
+  const cheio = { ed: true, trend: "alta", frOk: true, acimaM200: true, temSinal: true, riskOk: true };
+  ok("pontuacao maxima e 7", pontuacao(cheio) === 7, `veio ${pontuacao(cheio)}`);
+
+  const vazio = { ed: false, trend: "baixa", frOk: false, acimaM200: false, temSinal: false, riskOk: false };
+  ok("pontuacao minima e -5", pontuacao(vazio) === -5, `veio ${pontuacao(vazio)}`);
+
+  ok("o filtro de tendencia pesa 2, nao 1",
+     pontuacao({ ...cheio, ed: false }) === 3, `veio ${pontuacao({ ...cheio, ed: false })}`);
+  ok("tendencia lateral vale zero",
+     pontuacao({ ...cheio, trend: "lateral" }) === 6);
+  ok("tendencia de baixa vale -1",
+     pontuacao({ ...cheio, trend: "baixa" }) === 5);
+}
+
+{
+  const base = { ed: true, trend: "alta", frOk: true, acimaM200: true, temSinal: true, riskOk: true };
+  ok("forca relativa DESCONHECIDA vale zero, nao -1",
+     pontuacao({ ...base, frOk: null }) === 6,
+     `esperado 6, veio ${pontuacao({ ...base, frOk: null })}`);
+  ok("forca relativa mais fraca vale -1",
+     pontuacao({ ...base, frOk: false }) === 5);
+  ok("sem a serie do indice, o maximo real cai para 6",
+     pontuacao({ ...base, frOk: null }) === 6);
+  ok("MM 200 ausente vale zero",
+     pontuacao({ ...base, acimaM200: null }) === 6);
+}
+
+/* ---- Favor: o null que nao bloqueia ------------------------------------- */
+
+{
+  ok("favor exige o filtro de tendencia", aFavor(false, "alta", true) === false);
+  ok("favor recusa tendencia de baixa por pivos", aFavor(true, "baixa", true) === false);
+  ok("favor aceita tendencia lateral", aFavor(true, "lateral", true) === true);
+  ok("forca relativa DESCONHECIDA nao bloqueia o favor",
+     aFavor(true, "alta", null) === true,
+     "senao a tela ficaria sem nenhum Setup enquanto o Ibovespa nao carregar");
+  ok("forca relativa mais fraca bloqueia o favor", aFavor(true, "alta", false) === false);
 }
 
 console.log(falhas === 0 ? "\nTODOS OS TESTES PASSARAM" : `\n${falhas} TESTE(S) FALHARAM`);
