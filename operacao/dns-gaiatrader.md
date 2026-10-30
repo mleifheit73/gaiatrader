@@ -85,11 +85,34 @@ Conferidos caractere a caractere na tela em 30/10/2026. São exclusivos
 desta conta. Substituem `aurora.dns-parking.com` e
 `nebula.dns-parking.com`, que eram os de estacionamento da Hostinger.
 
+## Nameservers trocados (30/10/2026, 18h)
+
+A Hostinger confirmou a troca por `nile.ns.cloudflare.com` e
+`rosalyn.ns.cloudflare.com`, e passou a exibir "O DNS é gerenciado em
+outro provedor". O registro do domínio continua com ela.
+
+A Cloudflare está em "Waiting for your registrar to propagate your new
+nameservers". A verificação foi disparada manualmente e ela avisa por
+e-mail quando a zona ficar ativa. Costuma levar de 1 a 2 horas, podendo
+chegar a 24.
+
+**Enquanto não ativa, nada muda para quem acessa:** os nameservers
+antigos continuam respondendo, com os mesmos registros de antes.
+
+Também já foi feito: `SUPORTE_EMAIL` no `wrangler.toml` saiu de
+`info@gaiabelle.com`, que é de outro projeto, e passou a
+`contato@gaiatrader.com.br`.
+
 ## Pendente
-2. Trocar os nameservers na Hostinger pelos dois da Cloudflare.
-   **Este é o único passo que muda o comportamento do domínio.**
-3. Ligar o domínio ao Worker (Workers & Pages, Domains & Routes).
-4. Trocar `SUPORTE_EMAIL` no `wrangler.toml`, hoje `info@gaiabelle.com`,
-   para `contato@gaiatrader.com.br`.
+
+1. Esperar a zona ficar **Active** na Cloudflare.
+2. Ligar o domínio ao Worker: Workers & Pages, `gaiatrader`, Settings,
+   Domains & Routes, adicionar `gaiatrader.com.br` e `www`.
+3. **Testar o e-mail de verdade:** enviar de fora para
+   `contato@gaiatrader.com.br` e responder de lá, conferindo se a
+   resposta não cai em spam. Esse é o teste que prova que a correção
+   dos DKIM para DNS only funcionou. Sem ele, só temos a teoria.
+4. Decidir como o Marcelo lê e responde: encaminhamento para a caixa
+   que ele já usa, ou "enviar como" configurado no cliente de e-mail.
 
 O `gaiatrader.com` também é do Marcelo e fica parado por decisão dele.
