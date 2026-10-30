@@ -36,10 +36,21 @@ const perto = (a, b, tol) => {
 };
 const pct = (a, b) => (b === 0 ? "–" : ((a / b - 1) * 100).toFixed(3).replace(".", ",") + "%");
 
-const r = await fetch(base + "/api/bars?ticker=%5EBVSP&periodo=dia&limite=400");
+let r;
+try {
+  r = await fetch(base + "/api/bars?ticker=%5EBVSP&periodo=dia&limite=400");
+} catch (e) {
+  // O conteiner de desenvolvimento do Claude nao alcanca o workers.dev: a
+  // saida passa por um proxy com lista de permissao. Rode isto da sua maquina.
+  console.error("Nao consegui alcancar " + base);
+  console.error("  motivo: " + (e?.cause?.code || e?.message || e));
+  console.error("\n  Se voce esta num ambiente com a saida restrita, rode da sua");
+  console.error("  propria maquina:  node testes/conferir-ibovespa.mjs");
+  process.exit(2);
+}
 if (!r.ok) {
-  console.error("Falha ao ler a API: HTTP " + r.status);
-  console.error(await r.text().catch(() => ""));
+  console.error("A API respondeu HTTP " + r.status);
+  console.error((await r.text().catch(() => "")).slice(0, 400));
   process.exit(1);
 }
 const corpo = await r.json();
