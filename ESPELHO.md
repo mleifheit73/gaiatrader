@@ -55,16 +55,18 @@ Status: **feito**, **parcial**, **a fazer**.
 | 76 ações do Ibovespa | feito | lista `IBOV` confere com a base |
 | 20 criptomoedas | feito | lista `CRYPTO` confere |
 | Ibovespa (`^BVSP`) | **em carga** | cadastrado como `market='indice'`; a varredura das 21h30 faz a carga de 10 anos. Conferência cruzada em `testes/conferir-ibovespa.mjs` |
-| Dólar (`USDBRL=X`) | **a fazer** | ver ressalva abaixo |
+| Dólar (`USDBRL=X`) | **a fazer** | entra como LINHA de fechamento diário, nunca como candle |
 | Histórico diário | feito | 235.128 candles |
 | Semanal e mensal | feito | agregação local |
 | Eventos corporativos | feito | ajuste retroativo |
 | Códigos antigos | feito | costura verificada por sobreposição |
 
-> **Ressalva do próprio artefato sobre o Dólar:** a série diária do Yahoo
-> para câmbio **repete a abertura no fechamento em 54% dos candles**, o
-> que invalida médias, IFR, pivôs e a leitura técnica. Por isso ele fica
-> sem botão no artefato. Se entrar no SaaS, precisa de outra fonte.
+> **O Dólar é linha, não candle.** A série diária do Yahoo para câmbio
+> traz o fechamento do dia, não um candle de verdade: a abertura repete o
+> fechamento em 54% dos registros. Isso não é defeito a contornar, é a
+> natureza do dado. Portanto o Dólar entra desenhado como linha, sem
+> parecer, sem registro no Diário e sem ferramentas de desenho, como o
+> artefato já faz. Médias, IFR, pivôs e leitura técnica não se aplicam.
 
 ### Indicadores
 

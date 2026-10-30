@@ -170,11 +170,12 @@ Os componentes correspondentes seguem no sistema: `.verdict` com
 
 ### Duas condições presas a essa decisão
 
-**1. CNPI antes da primeira cobrança.** Emitir recomendação sobre valor
-mobiliário específico mediante remuneração é atividade regulada pela CVM
-(Resoluções 19 e 20). Com Situação, Entrada, Stop, Alvo e Veredito no
-produto pago, a cobrança não deve começar sem profissional certificado
-respondendo pelas análises. Isto é condição, não lembrete.
+**1. Um analista CNPI-T entra como parceiro na validação.** Emitir
+recomendação sobre valor mobiliário específico mediante remuneração é
+atividade regulada pela CVM (Resoluções 19 e 20), e o produto emite:
+Situação, Entrada, Stop, Alvo e Veredito. O Marcelo já tem a parceria
+encaminhada e trata o tema como dele. Registrado aqui como contexto do
+projeto, não como pendência a cobrar.
 
 **2. Nenhuma promessa de desempenho, em lugar nenhum.** Esta é
 independente da primeira. O CNPI resolve **quem pode** emitir
@@ -265,6 +266,14 @@ esse componente pronto na categoria. O botão principal leva à lista de
 espera; a tabela de preço já aparece, marcada como preço de lançamento.
 Na virada, troca o destino do botão e a página não precisa ser
 reescrita.
+
+### Identificação no rodapé
+
+Exigência para venda online no Brasil (Decreto 7.962). Razão social
+**GAIABELE NEGOCIOS E SERVICOS LTDA**, CNPJ 48.342.002/0001-95, Rua
+Heimberto R. C. Puhlmann, 236, Higienópolis, Santa Cruz do Sul, RS,
+CEP 96.825-200. O objeto social cobre a atividade: CNAE 6203-1/00,
+desenvolvimento e licenciamento de programas não-customizáveis (SaaS).
 
 ### Preço
 
