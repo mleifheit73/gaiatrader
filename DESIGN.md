@@ -175,11 +175,85 @@ tanto quanto para a interface.
 **Nada de copy prometendo desempenho**, lucro, acerto ou vantagem, em
 nenhuma página. Sem teste, não há o que prometer.
 
-## Marketing, pendente
+## Marketing (landing page)
 
-A direção da página de vendas (hero, prova, tabela de preço) ficou
-pendente de referências reais. Decisões já tomadas: base 16px, display
-fluido, largura 1120px, captura real do produto, sem depoimento
-inventado, preço de lançamento R$ 97/mês ou R$ 970/ano no PIX, e na fase
-de beta fechado o botão principal leva à lista de espera, não ao
-checkout.
+Direção definida a partir de 12 sistemas reais de fintech e SaaS escuro
+no UXKIN: [Copilot Money](https://uxkin.com/web?pack=w_USr6eQAYkKXR),
+[Origin Financial](https://uxkin.com/web?pack=w_-aqt7jKe61Ee),
+[Slash](https://uxkin.com/web?pack=w_hRT-0V0kqo9n),
+[AngelList](https://uxkin.com/web?pack=w_HoMcnlEFwTVm),
+[Boostinsurance](https://uxkin.com/web?pack=w_lkK6wG62fIFf),
+[Peppermint](https://uxkin.com/web?pack=w_3pEBfCY775SZ),
+[Ordinal](https://uxkin.com/web?pack=w_9woLgqYnomoa),
+[Basedash](https://uxkin.com/web?pack=w_aTqPP_xF4Amm),
+[Assurestor](https://uxkin.com/web?pack=w_2OCpLZPSOgJ3),
+[Felt](https://uxkin.com/web?pack=w_u6xhvS7j7_Ac),
+[IFTTT](https://uxkin.com/web?pack=w_U7lZq1JxWd0d) e
+[Tapbots](https://uxkin.com/web?pack=w_Q-mqyCjYYEwd).
+
+### O que eles confirmam
+
+**Um acento cromático só, reservado à ação.** Cinco dos doze dizem isso
+com todas as letras: Copilot ("the one chromatic accent on a dark
+canvas"), Ordinal ("the single chromatic accent"), Assurestor ("the sole
+chromatic signal"), Slash ("the only chromatic color, used sparingly"),
+Felt ("the single warm accent that cuts through"). Nosso esmeralda já é
+exatamente isso. **Regra:** `--accent` aparece em botão primário, link e
+estado ativo. Em mais nada. Título não é verde, ícone não é verde, borda
+não é verde.
+
+**Fundo quase preto com tinta, nunca preto puro.** Copilot usa azulado
+`#000814`, Ordinal violáceo `#151316`, AngelList azulado `#001d21`, e o
+IFTTT escreve a regra: "never substitute pure `#000000`, the slight
+warmth is intentional". Nosso `#0e1412` é um preto esverdeado. Está na
+família e não muda.
+
+### Três decisões que estavam em aberto
+
+**Ritmo de faixas, alternando escuro e claro.** O IFTTT põe como regra
+dura: "never stack two dark bands consecutively". Aqui isso cai bem,
+porque o Gaia Trader **já tem os dois temas**. A landing alterna faixas
+usando os mesmos tokens, sem inventar cor nenhuma: herói escuro, prova
+em papel quente, recursos escuro, preço em papel, FAQ escuro, rodapé.
+
+**Raio de 6px, sem pílula.** A categoria quase toda usa botão pílula
+(100px): IFTTT, Felt, Assurestor, Peppermint, Ordinal. **Divergimos de
+propósito.** Pílula lê como fintech de consumo, e o Gaia Trader é
+ferramenta de trabalho. Mais importante: o app inteiro usa 6px, e pílula
+só no site criaria costura visível entre a página de vendas e o produto
+que ela vende. Consistência vale mais que seguir a categoria.
+
+**Archivo continua, sem serifa.** Slash, Origin, Felt e Peppermint
+pareiam uma serifa de display para o registro "financeiro confiável".
+É bonito e não vamos fazer: trocar a face de display quebra a marca que
+já existe no artefato e nas telas.
+
+### Blocos da página
+
+Navegação com CTA, herói, faixa de números, seções de recurso, captura
+de e-mail do beta, tabela de preço, FAQ em acordeão, rodapé.
+
+**O herói carrega captura real do produto**, emoldurada. Ordinal, Slash
+e Basedash fazem assim, e nós temos produto de verdade para mostrar: a
+tela de rastreamento com os 76 ativos ordenados por liquidez. Nada de
+ilustração genérica de pessoa olhando gráfico.
+
+**A faixa de números usa fatos do sistema, nunca desempenho.** Os
+sistemas examinados usam esse bloco para prova social (usuários, volume
+transacionado). Não temos nada disso e inventar está fora de questão.
+Temos fatos reais e verificáveis: **235 mil candles**, **96 ativos**,
+**10 anos de histórico**, **varredura diária às 21h30**. Isso mostra
+substância sem prometer retorno, que é exatamente a linha que o produto
+precisa segurar.
+
+**Captura de e-mail no lugar do checkout, durante o beta.** O Slash tem
+esse componente pronto na categoria. O botão principal leva à lista de
+espera; a tabela de preço já aparece, marcada como preço de lançamento.
+Na virada, troca o destino do botão e a página não precisa ser
+reescrita.
+
+### Preço
+
+R$ 97 por mês, ou R$ 970 no PIX à vista para o plano anual (dois meses
+de desconto). Dois cartões, o anual destacado, sem terceiro plano
+inventado para fazer o do meio parecer barato.
