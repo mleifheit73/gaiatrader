@@ -125,17 +125,44 @@ fechou em 9 de 9, todos em DNS only, nenhum proxied.
 > isso se repetir noutra migração, o caminho é o mesmo: eu preparo e
 > confiro, ele executa a exclusão.
 
+## E-mail testado e aprovado (30/10/2026, 20h19)
+
+Teste de ponta a ponta, com evidência:
+
+| Teste | Resultado |
+|---|---|
+| Gmail → `contato@gaiatrader.com.br` | chegou às 20:17 |
+| `contato@` → Gmail | chegou às 20:19, **na aba Principal, não no Spam** |
+
+A segunda linha é a que prova a correção dos DKIM. Um domínio criado há
+três horas passando pelo filtro do Gmail direto para a Principal só
+acontece com SPF, DKIM e DMARC alinhados. Se os três DKIM tivessem
+ficado como "Proxied", essa mensagem teria ido para o spam.
+
+### Correção de uma afirmação minha
+
+Eu disse que o plano Starter não acrescentaria assinatura da Hostinger.
+Errado. O plano ativado é **"Starter Business Email Free Trial"**, um
+degrau separado do Starter puro, e ele **acrescenta "Sent with Hostinger
+Mail"** no rodapé. Os outros dois domínios do Marcelo estão no Starter
+sem "Free Trial" e não têm isso. Tirar a assinatura exige upgrade pago.
+
+Decisão: fica como está durante o beta. Reavaliar no lançamento, quando
+R$ 2,49 por mês para limpar o rodapé de um produto pago é barato.
+
+### O plano, como está de fato
+
+- `@gaiatrader.com.br`, Starter Business Email **Free Trial**
+- **1 de 5 caixas** usadas (os outros planos do Marcelo são 1/1), então
+  dá para criar `suporte@` sem custo durante o teste
+- Expira **2027-10-30**, renovação automática **ligada**
+- Lembrete agendado para 2027-09-30 confere com essa data
+
 ## Pendente
 
-**Testar o e-mail de verdade.** Enviar de fora para
-`contato@gaiatrader.com.br` e responder de lá, conferindo se a resposta
-chega na caixa de entrada e não no spam. Esse é o teste que prova que a
-correção dos DKIM para DNS only funcionou. Até ele passar, temos teoria,
-não evidência. O recebimento já tem prova: a mensagem de boas-vindas da
-Hostinger entrou na caixa.
-
-**Decidir como o Marcelo lê e responde.** Encaminhamento para a caixa
-que ele já usa, ou "enviar como" configurado no cliente de e-mail. O
-plano Starter tem 5 regras de encaminhamento e 5 aliases disponíveis.
+**Decidir como o Marcelo lê e responde.** Hoje ele entra no webmail da
+Hostinger. O plano tem 5 regras de encaminhamento e 5 aliases livres,
+então dá para encaminhar para a caixa que ele já usa, ou configurar
+"enviar como" no cliente dele.
 
 O `gaiatrader.com` também é do Marcelo e fica parado por decisão dele.
