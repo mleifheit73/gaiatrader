@@ -14,35 +14,77 @@ Leva uns 10 minutos.
 3. Nome do projeto: **Gaia Trader**. Clique em **Criar**
 4. Espere uns segundos e confirme que o seletor do topo agora mostra "Gaia Trader"
 
-## Parte 2: a tela de consentimento
+## Parte 2: a tela de permissão
 
 É a tela que aparece para o usuário dizendo "o Gaia Trader quer acessar sua conta".
 
-1. No menu da esquerda, vá em **APIs e serviços**, depois **Tela de permissão
-   OAuth** (ou **OAuth consent screen**)
-2. Escolha **Externo** (**External**) e clique em **Criar**
-3. Preencha:
-   - Nome do app: **Gaia Trader**
-   - E-mail de suporte do usuário: **contato@gaiatrader.com.br**
-   - Domínio do app, página inicial: **https://gaiatrader.com.br**
-   - Domínios autorizados: **gaiatrader.com.br**
-   - E-mail do desenvolvedor: **mleifheit@gmail.com**
-4. Clique em **Salvar e continuar**
-5. Na tela de **Escopos**, não adicione nada. Clique em **Salvar e continuar**
-6. Na tela de **Usuários de teste**, adicione **mleifheit@gmail.com** e
-   **laghettogolden@gmail.com**. Clique em **Salvar e continuar**
+O Google tem duas interfaces para isso, e a que você vai ver depende da conta.
+A nova se chama **Google Auth Platform** e o menu da esquerda tem: Visão geral,
+Branding, Público-alvo, Clientes, Acesso a dados, Central de verificação.
 
-> **Importante sobre o modo de teste:** enquanto o app estiver como "Em teste",
-> **só os e-mails que você cadastrar como usuários de teste conseguem entrar**.
-> Isso é perfeito para o beta fechado. Quando for abrir para o público, você
-> publica o app, e aí o Google pode pedir uma verificação.
+### Passo 1, Informações do app
+
+- **Nome do app:** `Gaia Trader`
+- **E-mail para suporte do usuário:** escolha **`mleifheit@gmail.com`** na lista
+
+> **Atenção, isto confunde:** esse campo **não é de digitar**. É uma lista
+> suspensa, e o Google só aceita ali o e-mail da conta que está logada ou um
+> grupo do Google que você administre. O `contato@gaiatrader.com.br` é uma
+> caixa do Hostinger, não uma conta Google, então ele **não pode** aparecer
+> nessa lista. Use o seu Gmail e siga em frente: esse endereço serve só para
+> o usuário ter como te contatar a respeito da permissão.
+
+Clique em **Avançar**.
+
+### Passo 2, Público
+
+Escolha **Externo** (**External**).
+
+Interno só existe para contas do Google Workspace com domínio próprio, e deixa
+entrar apenas gente da mesma empresa. Não é o nosso caso.
+
+Clique em **Avançar**.
+
+### Passo 3, Dados de contato
+
+Aqui **você digita**. É o endereço que o Google usa para te avisar sobre
+mudanças no projeto. Pode usar `mleifheit@gmail.com` ou
+`contato@gaiatrader.com.br`, tanto faz, porque aqui aceita texto livre.
+
+Clique em **Avançar**, aceite os termos e **Criar**.
+
+### Passo 4, quem pode entrar durante o beta
+
+No menu da esquerda, vá em **Público-alvo**.
+
+Se o estado estiver como **Em teste** (**Testing**), existe uma seção
+**Usuários de teste**. Clique em **Adicionar usuários** e cadastre:
+
+- `mleifheit@gmail.com`
+- `laghettogolden@gmail.com`
+
+> **Isso é melhor do que parece.** Enquanto o app estiver "Em teste", **só os
+> e-mails dessa lista conseguem entrar**, e mais ninguém. É uma porta de
+> convidados pronta para o beta fechado, sem você precisar programar nada.
+> Quando for abrir para o público, você publica o app, e aí o Google pode
+> pedir uma verificação.
+
+### Passo 5, escopos
+
+No menu da esquerda, **Acesso a dados**. **Não adicione nada.**
+
+Nosso login pede só nome, e-mail e foto, que o Google já entrega por padrão.
+Pedir permissão que não se usa é pedir risco de graça, e ainda complica a
+verificação lá na frente.
 
 ## Parte 3: criar as credenciais
 
-1. Ainda em **APIs e serviços**, vá em **Credenciais** (**Credentials**)
-2. Clique em **Criar credenciais**, depois **ID do cliente OAuth**
-3. Tipo de aplicativo: **Aplicativo da Web** (**Web application**)
-4. Nome: **Gaia Trader Web**
+1. No menu da esquerda, clique em **Clientes** (na interface antiga é
+   **Credenciais**)
+2. Clique em **Criar cliente** (ou **Criar credenciais**, depois **ID do
+   cliente OAuth**)
+3. **Tipo de aplicativo:** `Aplicativo da Web` (**Web application**)
+4. **Nome:** `Gaia Trader Web`
 5. Em **URIs de redirecionamento autorizados** (**Authorized redirect URIs**),
    clique em **Adicionar URI** e cole **exatamente** isto:
 
@@ -53,6 +95,9 @@ Leva uns 10 minutos.
    > Esse endereço tem que bater **caractere por caractere** com o que o nosso
    > servidor usa. Uma barra a mais no fim já faz o Google recusar com
    > `redirect_uri_mismatch`, que é o erro mais comum nessa montagem.
+
+   Não precisa preencher "Origens JavaScript autorizadas": o nosso login não
+   usa JavaScript para falar com o Google, é o servidor que faz isso.
 
 6. Clique em **Criar**
 
