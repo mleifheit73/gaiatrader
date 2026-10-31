@@ -196,6 +196,16 @@ export function eden(b, I, i) {
 }
 
 /**
+ * Casas decimais do plano de risco, por mercado.
+ *
+ * O artefato fixa 2. Serve para a B3, onde 2 casas e o centavo, e destroi
+ * cripto de preco baixo: uma entrada de R$ 0,0000245 arredondada para 2 casas
+ * vira R$ 0,01, quatrocentas vezes o preco do ativo, com stop e alvo errados
+ * na mesma proporcao. E nao daria erro nenhum: sairiam tres numeros plausiveis.
+ */
+export const casasDe = (market) => (market === "cripto" ? 8 : 2);
+
+/**
  * Plano de risco de uma entrada.
  *
  * PECULIARIDADE: o ATR aqui e media ARITMETICA de 14 true ranges, nao a
@@ -431,9 +441,19 @@ export function classify(alvo, nAt = null, opcoes = {}) {
   // Sem base, devolve null em vez de uma leitura fraca. A tela mostra "–".
   if (!b || n < MINIMO_CANDLES || !I || I.mm80[n] == null || I.mm80[n - 1] == null) return null;
 
+  // DIVERGENCIA DELIBERADA DO ARTEFATO.
+  //
+  // No artefato, a trava do Dolar fica na tela: classify() aceita ser chamado
+  // nele, e e o botao do grafico que simplesmente nao existe. Aqui nao serve:
+  // a varredura percorre os 96 ativos num laco, e um esquecimento produziria
+  // leitura tecnica sobre dados que o proprio artefato declara invalidos para
+  // medias, IFR e pivos. A trava desceu para ca, onde nao da para esquecer.
+  const infoCtx = CONTEXTO_POR_TICKER[alvo.ticker];
+  if (infoCtx && infoCtx.grafico === false) return null;
+
   const ehCripto = alvo.market === "cripto";
-  const ctx = ehContexto(alvo.ticker);
-  const casas = opcoes.casas != null ? opcoes.casas : 2;
+  const ctx = !!infoCtx;
+  const casas = opcoes.casas != null ? opcoes.casas : casasDe(alvo.market);
   const indice = opcoes.indice || null;
 
   const x = b[n], c = x.c, bs = b.slice(0, n + 1);

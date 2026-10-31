@@ -240,3 +240,31 @@ compra."
 100 com média de 21. Ela alimenta só o painel de gráfico "Força contra o
 Ibovespa", não o `classify()`, então fica para quando o gráfico for
 construído.
+
+## Decisões do Marcelo, 30/10/2026
+
+**Cripto usa 8 casas decimais.** O artefato fixa 2, que serve para a B3 e
+destrói cripto de preço baixo. A escolha agora é automática por mercado
+(`casasDe(market)`), não um parâmetro que o chamador precisa lembrar de
+passar. Há teste mostrando o mesmo ativo de R$ 0,0000245 apurado como ação
+(entrada R$ 0,01, errada) e como cripto (entrada R$ 0,00005081, na escala).
+
+**O Dólar foi cadastrado** como `USDBRL=X`, mercado `cambio`, para carregar
+na varredura de 30/10. Ele existe como contexto e não vira linha do scanner.
+
+### Divergência deliberada no classify(), por causa do Dólar
+
+No artefato, a trava do Dólar fica na tela: `classify()` aceita ser chamado
+nele, e é o botão do gráfico que simplesmente não existe. Aqui isso não
+serve, porque a varredura percorre os 96 ativos num laço e um esquecimento
+produziria leitura técnica sobre dados que o próprio artefato declara
+inválidos para médias, IFR e pivôs.
+
+A trava desceu para dentro do `classify()`: ativo de contexto com
+`grafico: false` devolve null. É um bloco de duas linhas, removível sem
+prejuízo, e está marcado no código como divergência.
+
+A afirmação dos 54% de candles com abertura igual ao fechamento vem do
+comentário do artefato. A consulta 2 de `operacao/conferir-carga.sql` mede
+isso na nossa própria base depois da carga, em vez de confiar na afirmação.
+Se vier perto de zero, a trava precisa ser revista.

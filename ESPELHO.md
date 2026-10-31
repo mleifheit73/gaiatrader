@@ -159,3 +159,23 @@ Vale registrar, porque não deve ser perdido no porte:
 - Detecção de ativo atrasado e de histórico raso
 - 163 testes automatizados
 - Disciplina de leitura do D1, com o custo medido
+
+## Limitação de rede deste ambiente
+
+Este container **não alcança** `gaiatrader.com.br` nem `gaiatrader.workers.dev`:
+o proxy de saída recusa a conexão, porque os dois hosts estão fora do
+allowlist da sessão. Também não alcança o Yahoo. Consequências práticas:
+
+- Não dá para conferir a carga pelas rotas da API daqui. A conferência vai
+  por SQL no D1, via conector do Cloudflare, que funciona. As consultas estão
+  em `operacao/conferir-carga.sql`.
+- `testes/conferir-ibovespa.mjs` nunca vai conseguir buscar os dados por conta
+  própria neste ambiente. Ele já trata a falha, mas o `fetch` dele só serve
+  rodando de fora.
+- Não dá para testar se o Yahoo aceita o símbolo do câmbio (`USDBRL=X` vira
+  `USDBRL%3DX` na URL). A codificação é padrão e deve funcionar, mas isso é
+  dedução, não medição. Só a varredura prova.
+
+Se o Marcelo liberar `gaiatrader.com.br` em claude.ai, Settings > Capabilities,
+a conferência passa a testar o caminho inteiro (Worker, ajuste, agregação) e
+não só a tabela.

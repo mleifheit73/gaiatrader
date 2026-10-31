@@ -8,7 +8,7 @@
 import {
   sma, ema, smaN, rsi, stoch, macd, boll, obv, psar,
   pivots, eden, riskPlan, signals, relRet, compute,
-  situacao, pontuacao, aFavor, classify, ehContexto, CONTEXTO, MINIMO_CANDLES,
+  situacao, pontuacao, aFavor, classify, ehContexto, CONTEXTO, MINIMO_CANDLES, casasDe,
 } from "../src/metodo.js";
 
 let falhas = 0;
@@ -525,6 +525,63 @@ const I_RECUO = compute(altaComRecuo);
      dolar.grafico === false);
   const ibov = CONTEXTO.find((x) => x.ticker === "^BVSP");
   ok("o Ibovespa tem grafico", ibov.grafico === true);
+}
+
+/* ---- Casas decimais por mercado ----------------------------------------- */
+
+{
+  ok("acao usa 2 casas, o centavo da B3", casasDe("acao") === 2);
+  ok("cripto usa 8 casas", casasDe("cripto") === 8);
+  ok("cambio e indice caem no padrao de 2", casasDe("cambio") === 2 && casasDe("indice") === 2);
+}
+
+{
+  // O mesmo ativo de preco baixo, apurado como acao e como cripto. A entrada
+  // tem que sair na escala do ativo quando o mercado e cripto, sem ninguem
+  // precisar lembrar de passar o parametro.
+  const p = [];
+  for (let i = 0; i < 310; i++) p.push(0.0000200 + i * 0.0000001);
+  const base = p[p.length - 1];
+  p.push(base - 0.0000005, base - 0.0000009, base - 0.0000002);
+  const bars = p.map((c, i) => ({
+    d: `d${String(i).padStart(4, "0")}`, o: c, h: c + 0.0000001, l: c - 0.0000001, c, v: 1000,
+  }));
+  const I = compute(bars);
+
+  const cripto = classify({ ticker: "SHIB", market: "cripto", bars, I });
+  const acao = classify({ ticker: "XPTO3", market: "acao", bars, I });
+
+  if (cripto && cripto.sg) {
+    ok("cripto: a entrada fica na escala do ativo, sem passar parametro",
+       cripto.entry < 0.001, `veio ${cripto.entry}`);
+    ok("cripto: stop e alvo tambem ficam na escala",
+       cripto.stop < 0.001 && cripto.target < 0.001,
+       `stop ${cripto.stop} alvo ${cripto.target}`);
+    ok("cripto: o alvo continua acima da entrada", cripto.target > cripto.entry);
+  } else {
+    ok("cripto: a serie de teste produziu candle sinal", false,
+       "sem sinal, o caso nao exercita o arredondamento");
+  }
+
+  if (acao && acao.sg) {
+    ok("o mesmo ativo como acao ainda sofre o arredondamento do artefato",
+       acao.entry === 0.01, `veio ${acao.entry}`);
+  } else {
+    ok("acao: a serie de teste produziu candle sinal", false);
+  }
+}
+
+/* ---- Trava do ativo de contexto sem grafico ------------------------------ */
+
+{
+  const bars = altaComRecuo;
+  const I = I_RECUO;
+  ok("o Dolar nao recebe leitura tecnica: dado invalido para medias e pivos",
+     classify({ ticker: "USDBRL=X", market: "cambio", bars, I }) === null);
+  ok("o Ibovespa recebe leitura tecnica",
+     classify({ ticker: "^BVSP", market: "indice", bars, I }) !== null);
+  ok("uma acao recebe leitura tecnica",
+     classify({ ticker: "PETR4", market: "acao", bars, I }) !== null);
 }
 
 console.log(falhas === 0 ? "\nTODOS OS TESTES PASSARAM" : `\n${falhas} TESTE(S) FALHARAM`);
