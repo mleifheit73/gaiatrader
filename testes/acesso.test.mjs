@@ -10,7 +10,9 @@ import {
   nivel, podeEntrar, podeLer, podeEscrever, podeGastarIA, podeSalvarConteudo,
   aviso, podePedirParecer, motivoEmTexto, precisaAlertarAdmin,
   SEM_ACESSO, SO_LEITURA, COMPLETO,
+  ehAdmin, papelDoLogin, lerAdmins, gravarAdmins, CHAVE_ADMINS,
 } from "../src/acesso.js";
+import { bancoDeTeste } from "./ajuda-d1.mjs";
 
 let falhas = 0;
 function ok(nome, cond, extra = "") {
@@ -145,6 +147,102 @@ const cota = { pareceres_mes: 200, pareceres_hora: 30, alerta_em: 150 };
      precisaAlertarAdmin(cota, { pareceres: 180, alerta_enviado: 1 }) === false,
      "senao o painel vira ruido e o admin para de olhar");
   ok("sem dados nao alerta", precisaAlertarAdmin(null, null) === false);
+}
+
+/* ========================================================================
+   ADMINISTRADOR
+   ======================================================================== */
+
+{
+  const adm = { id: "a1", ativo: 1, papel: "admin" };
+  ok("administrador tem acesso completo sem assinatura nenhuma",
+     nivel(adm, null) === COMPLETO,
+     "ele e o dono do sistema, nao um cliente dele");
+  ok("administrador continua completo com assinatura atrasada",
+     nivel(adm, { status: "atrasada" }) === COMPLETO);
+  ok("administrador bloqueado pelo admin perde o acesso",
+     nivel({ ...adm, ativo: 0 }, null) === SEM_ACESSO,
+     "a trava de conta vale para todos");
+  ok("ehAdmin reconhece o papel", ehAdmin(adm) === true);
+  ok("ehAdmin recusa usuario comum", ehAdmin({ papel: "usuario" }) === false);
+  ok("ehAdmin aguenta nulo", ehAdmin(null) === false);
+}
+
+{
+  // A cota continua valendo para o administrador: e assim que o custo dele
+  // aparece medido na tela junto com o de todo mundo.
+  const cota = { pareceres_mes: 200, pareceres_hora: 30, alerta_em: 150 };
+  const r = podePedirParecer(COMPLETO, cota, { pareceres: 200 }, null);
+  ok("o administrador tambem esbarra na cota", r.permitido === false,
+     "se ele fosse ilimitado, o custo dele sumiria da medicao");
+}
+
+/* ---- Pre-autorizacao por e-mail ----------------------------------------- */
+
+const LISTA = ["mleifheit@gmail.com"];
+
+{
+  ok("o e-mail pre-autorizado vira admin",
+     papelDoLogin({ email: "mleifheit@gmail.com", email_verified: true }, LISTA) === "admin");
+  ok("maiuscula e espaco nao atrapalham",
+     papelDoLogin({ email: "  MLeifheit@Gmail.COM ", email_verified: true }, LISTA) === "admin");
+  ok("outro e-mail vira usuario comum",
+     papelDoLogin({ email: "qualquer@gmail.com", email_verified: true }, LISTA) === "usuario");
+  ok("login sem e-mail vira usuario comum",
+     papelDoLogin({ email_verified: true }, LISTA) === "usuario");
+  ok("lista vazia nao promove ninguem",
+     papelDoLogin({ email: "mleifheit@gmail.com", email_verified: true }, []) === "usuario");
+}
+
+{
+  // A condicao que importa de verdade.
+  ok("e-mail NAO VERIFICADO pelo Google nao vira admin",
+     papelDoLogin({ email: "mleifheit@gmail.com", email_verified: false }, LISTA) === "usuario",
+     "senao bastaria alegar o endereco para virar dono do sistema");
+}
+
+{
+  const d1 = bancoDeTeste();
+  ok("sem nada gravado, a lista de admins vem vazia", (await lerAdmins(d1)).length === 0);
+
+  await gravarAdmins(d1, ["mleifheit@gmail.com"]);
+  const lista = await lerAdmins(d1);
+  ok("a lista e gravada e lida de volta",
+     lista.length === 1 && lista[0] === "mleifheit@gmail.com", JSON.stringify(lista));
+  ok("fica na tabela config, sem tabela nova",
+     d1.cru.prepare("SELECT valor FROM config WHERE chave=?").get(CHAVE_ADMINS).valor === "mleifheit@gmail.com");
+
+  await gravarAdmins(d1, ["  MLeifheit@Gmail.com ", "outro@exemplo.com", "mleifheit@gmail.com"]);
+  const l2 = await lerAdmins(d1);
+  ok("normaliza e remove repetido", l2.length === 2 && l2[0] === "mleifheit@gmail.com",
+     JSON.stringify(l2));
+}
+
+{
+  const d1 = bancoDeTeste();
+  const tenta = async (v) => { try { await gravarAdmins(d1, v); return null; } catch (e) { return e.message; } };
+  ok("lista vazia e recusada", /nao pode ficar vazia/.test(await tenta([]) || ""),
+     "gravar vazio trancaria todo mundo para fora do painel");
+  ok("lista so com espacos e recusada", /nao pode ficar vazia/.test(await tenta(["  ", ""]) || ""));
+  ok("e-mail invalido e recusado", /invalido/.test(await tenta(["nao-e-email"]) || ""));
+}
+
+{
+  // O caminho completo: lista no banco, login do Google, papel resultante.
+  const d1 = bancoDeTeste();
+  await gravarAdmins(d1, ["mleifheit@gmail.com"]);
+  const lista = await lerAdmins(d1);
+
+  const dono = papelDoLogin({ email: "mleifheit@gmail.com", email_verified: true }, lista);
+  const outro = papelDoLogin({ email: "laghettogolden@gmail.com", email_verified: true }, lista);
+  ok("caminho completo: o e-mail do Marcelo entra como admin", dono === "admin");
+  ok("caminho completo: outro e-mail dele entra como usuario comum", outro === "usuario",
+     "so o endereco da lista e promovido");
+
+  d1.cru.exec(`INSERT INTO users (id,google_sub,email,papel) VALUES ('u1','sub-1','mleifheit@gmail.com','${dono}')`);
+  const u = d1.cru.prepare("SELECT * FROM users WHERE id='u1'").get();
+  ok("o usuario nasce com papel admin no banco", u.papel === "admin");
+  ok("e tem acesso completo sem assinatura", nivel(u, null) === COMPLETO);
 }
 
 console.log(falhas === 0 ? "\nTODOS OS TESTES PASSARAM" : `\n${falhas} TESTE(S) FALHARAM`);

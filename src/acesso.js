@@ -33,10 +33,82 @@ export const COMPLETO   = "completo";     // beta ou assinatura ativa
  */
 export function nivel(user, assinatura) {
   if (!user || user.ativo === 0) return SEM_ACESSO;
+  // Administrador tem acesso completo sem assinatura. Ele e o dono do
+  // sistema, nao um cliente dele. Mas repare que a COTA de IA continua
+  // valendo para ele (ver podePedirParecer): e assim que o custo dele
+  // aparece medido na tela de consumo junto com o de todo mundo, que e o
+  // ponto inteiro do beta.
+  if (user.papel === "admin") return COMPLETO;
   if (!assinatura) return SO_LEITURA;            // cadastrou e nunca assinou
   if (assinatura.status === "beta") return COMPLETO;
   if (assinatura.status === "ativa") return COMPLETO;
   return SO_LEITURA;                              // atrasada, cancelada, qualquer outro
+}
+
+export const ehAdmin = (user) => !!user && user.papel === "admin";
+
+/* ========================================================================
+   QUEM E ADMINISTRADOR
+
+   O Google so devolve o identificador estavel da conta (o `sub`) no
+   PRIMEIRO login. Por isso nao da para criar a linha do administrador
+   antes dele entrar: o campo obrigatorio ainda nao existe.
+   
+   A solucao e pre-autorizar o e-mail. A lista fica na tabela `config`, que
+   o administrador edita sem precisar de deploy, e o primeiro login com um
+   e-mail da lista ja nasce com papel de admin.
+
+   DUAS CONDICOES, as duas obrigatorias:
+
+   1. o e-mail tem que estar na lista
+   2. o Google tem que ter marcado o e-mail como VERIFICADO
+
+   Sem a segunda, bastaria alguem conseguir uma conta que alegue aquele
+   e-mail para virar administrador do sistema. O `email_verified` do Google
+   e o que amarra o endereco a uma caixa que a pessoa controla de verdade.
+   ======================================================================== */
+
+export const CHAVE_ADMINS = "admin.emails";
+
+/** Normaliza para comparar: minusculas e sem espaco em volta. */
+const normaliza = (e) => String(e || "").trim().toLowerCase();
+
+/**
+ * Qual papel este login do Google deve receber.
+ *
+ * @param perfil  { email, email_verified } como o Google devolve
+ * @param lista   e-mails pre-autorizados
+ */
+export function papelDoLogin(perfil, lista) {
+  const email = normaliza(perfil && perfil.email);
+  if (!email) return "usuario";
+  if (perfil.email_verified === false) return "usuario";
+  const autorizados = (lista || []).map(normaliza).filter(Boolean);
+  return autorizados.includes(email) ? "admin" : "usuario";
+}
+
+/** Le a lista de e-mails pre-autorizados da tabela config. */
+export async function lerAdmins(db) {
+  const r = await db.prepare(`SELECT valor FROM config WHERE chave = ?`).bind(CHAVE_ADMINS).first();
+  if (!r || !r.valor) return [];
+  return String(r.valor).split(",").map(normaliza).filter(Boolean);
+}
+
+/** Grava a lista. Recusa lista vazia, que trancaria todo mundo para fora. */
+export async function gravarAdmins(db, emails) {
+  const limpos = [...new Set((emails || []).map(normaliza).filter(Boolean))];
+  if (!limpos.length) throw new Error("a lista de administradores nao pode ficar vazia");
+  for (const e of limpos) {
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) throw new Error(`e-mail invalido: ${e}`);
+  }
+  await db
+    .prepare(
+      `INSERT INTO config (chave, valor, updated_at) VALUES (?, ?, datetime('now'))
+         ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor, updated_at = datetime('now')`
+    )
+    .bind(CHAVE_ADMINS, limpos.join(","))
+    .run();
+  return limpos;
 }
 
 export const podeEntrar   = (n) => n !== SEM_ACESSO;
