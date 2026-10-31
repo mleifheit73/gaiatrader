@@ -179,3 +179,28 @@ allowlist da sessão. Também não alcança o Yahoo. Consequências práticas:
 Se o Marcelo liberar `gaiatrader.com.br` em claude.ai, Settings > Capabilities,
 a conferência passa a testar o caminho inteiro (Worker, ajuste, agregação) e
 não só a tabela.
+
+## Limites do plano gratuito da BRAPI
+
+Medido em 30/10/2026, chamando as ferramentas:
+
+| Dado | Plano gratuito |
+|---|---|
+| Ações da B3 (histórico, cotação) | **funciona** |
+| Câmbio (USD-BRL) | **bloqueado**, exige plano Startup (R$ 119,99/mês) |
+| Criptomoedas | **bloqueado**, exige plano Startup (R$ 119,99/mês) |
+
+O catálogo de pares de câmbio é público (o par USD-BRL existe e está
+listado), mas a cotação em si é paga.
+
+Isso muda o plano de saída do Yahoo. A BRAPI resolve as 76 ações da B3, e
+**não** resolve as 20 criptos nem o Dólar sem assinar o Startup. Então a
+migração não é "trocar Yahoo por BRAPI": são três decisões separadas, uma
+por classe de ativo.
+
+Nosso provedor `src/providers/brapi.js` já recusa cripto de propósito, com
+erro explícito ("provedor de ações da B3, não atende cripto"), e há teste
+afirmando a recusa. Isso é bom: fecha de antemão uma armadilha real, porque
+a ferramenta `get_crypto_prices` da BRAPI tem `currency` com **padrão BRL**.
+Se alguém chamasse sem passar `USD`, gravaríamos reais numa coluna de dólar
+sem erro nenhum.

@@ -117,5 +117,101 @@ const r4 = await yahoo.daily("PETR4", "b3", { range: "10y" });
 ok("dividendo lido", r4.eventos.dividendos.length === 1 && r4.eventos.dividendos[0].valor === 7.48);
 ok("desdobramento lido com a razao certa", r4.eventos.desdobramentos[0].razao === 2);
 
+/* ========================================================================
+   MOEDA DOS ATIVOS: CRIPTO EM DOLAR, NUNCA EM REAIS
+
+   O Marcelo pediu confirmacao explicita disso, entao fica travado em teste
+   em vez de so ficar certo por enquanto. Misturar as duas moedas na mesma
+   coluna nao daria erro nenhum: BTC a 109 mil e plausivel em dolar e
+   plausivel em reais, e a variacao percentual continuaria parecendo certa.
+   So o valor absoluto estaria errado, em 5 vezes.
+   ======================================================================== */
+
+function respostaSimples({ currency, closes }) {
+  const base = Math.floor(Date.parse("2026-10-20T13:00:00Z") / 1000);
+  return {
+    chart: {
+      result: [{
+        meta: { symbol: "X", currency, gmtoffset: -10800, regularMarketTime: base + 86400 * 10 },
+        timestamp: closes.map((_, i) => base + 86400 * i),
+        indicators: {
+          quote: [{
+            open:  closes.map((c) => c),
+            high:  closes.map((c) => c),
+            low:   closes.map((c) => c),
+            close: closes.map((c) => c),
+            volume: closes.map(() => 1000),
+          }],
+        },
+      }],
+      error: null,
+    },
+  };
+}
+
+{
+  // Captura a URL que o provedor monta, para provar o sufixo do simbolo.
+  let urlVista = null;
+  globalThis.fetch = async (u) => {
+    urlVista = String(u);
+    return { ok: true, status: 200, json: async () => respostaSimples({ currency: "USD", closes: [100, 101, 102] }) };
+  };
+
+  const r = await yahoo.daily("BTC", "cripto", { range: "5d" });
+  ok("cripto vira BTC-USD no simbolo do Yahoo",
+     /BTC-USD/.test(urlVista), `url: ${urlVista}`);
+  ok("cripto NAO leva o sufixo .SA das acoes da B3", !/\.SA/.test(urlVista));
+  ok("cripto volta em USD", r.currency === "USD", `veio ${r.currency}`);
+}
+
+{
+  // Acao da B3 segue em reais e com o sufixo .SA.
+  let urlVista = null;
+  globalThis.fetch = async (u) => {
+    urlVista = String(u);
+    return { ok: true, status: 200, json: async () => respostaSimples({ currency: "BRL", closes: [30, 31, 32] }) };
+  };
+  const r = await yahoo.daily("PETR4", "b3", { range: "5d" });
+  ok("acao da B3 leva sufixo .SA", /PETR4\.SA/.test(urlVista), `url: ${urlVista}`);
+  ok("acao da B3 volta em BRL", r.currency === "BRL", `veio ${r.currency}`);
+}
+
+{
+  // Cambio e indice nao levam sufixo nenhum: o ticker ja e o simbolo.
+  let urlVista = null;
+  globalThis.fetch = async (u) => {
+    urlVista = String(u);
+    return { ok: true, status: 200, json: async () => respostaSimples({ currency: "BRL", closes: [5.4, 5.41, 5.42] }) };
+  };
+  await yahoo.daily("USDBRL=X", "cambio", { range: "5d" });
+  ok("cambio vai sem sufixo, so codificado na URL",
+     /USDBRL(%3D|=)X/.test(urlVista) && !/-USD/.test(urlVista) && !/\.SA/.test(urlVista),
+     `url: ${urlVista}`);
+
+  await yahoo.daily("^BVSP", "indice", { range: "5d" });
+  ok("indice vai sem sufixo", /(%5E|\^)BVSP/.test(urlVista) && !/\.SA/.test(urlVista),
+     `url: ${urlVista}`);
+}
+
+{
+  // FURO CONHECIDO, documentado de proposito.
+  //
+  // O codigo e `meta.currency || (cripto ? "USD" : "BRL")`. O fallback esta
+  // certo, mas o meta GANHA dele. Como pedimos BTC-USD, o Yahoo responde USD
+  // e na pratica nunca da problema. Mas se um dia ele responder outra moeda,
+  // nos gravamos essa moeda numa linha de cripto sem reclamar.
+  //
+  // Este teste afirma o comportamento ATUAL, nao o desejado. Se o Marcelo
+  // mandar forcar USD para cripto, este teste muda junto.
+  globalThis.fetch = async () => ({
+    ok: true, status: 200,
+    json: async () => respostaSimples({ currency: "BRL", closes: [100, 101, 102] }),
+  });
+  const r = await yahoo.daily("BTC", "cripto", { range: "5d" });
+  ok("FURO: se o Yahoo disser BRL numa cripto, o codigo hoje aceita",
+     r.currency === "BRL",
+     "comportamento atual; forcar USD e decisao do Marcelo");
+}
+
 console.log(falhas === 0 ? "\nTODOS OS TESTES PASSARAM" : `\n${falhas} TESTE(S) FALHARAM`);
 process.exit(falhas === 0 ? 0 : 1);
