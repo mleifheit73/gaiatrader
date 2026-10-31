@@ -24,6 +24,12 @@ import {
   MODELOS, TIPOS, lerModelos, gravarModelo,
   consumoPorUsuario, totaisConsumo, usuariosEmAlerta, ajustarCota,
 } from "./consumo.js";
+import {
+  COOKIE_SESSAO, COOKIE_STATE, aleatorio, lerCookie, montarCookie,
+  conferirConfig, urlAutorizacao, trocarCodigo, lerIdToken, validarPerfil,
+  entrar, lerSessao, sair,
+} from "./auth.js";
+import { nivel, aviso, podeEscrever, podeGastarIA, podePedirParecer, ehAdmin } from "./acesso.js";
 
 const json = (data, status = 200, extra = {}) =>
   new Response(JSON.stringify(data, null, 2), {
@@ -343,16 +349,16 @@ export default {
         const check = conferirAdmin(request, env);
         if (check === "sem_segredo_no_servidor") {
           return erro(
-            "O segredo ADMIN_TOKEN nao esta configurado neste Worker. " +
+            "O segredo ADMIN_TOKEN não está configurado neste Worker. " +
               "Defina-o em Settings, Variables and Secrets, e tente de novo.",
             503
           );
         }
         if (check === "sem_cabecalho") {
-          return erro("Faltou o cabecalho x-admin-token na requisicao.", 401);
+          return erro("Faltou o cabeçalho x-admin-token na requisição.", 401);
         }
         if (check !== "ok") {
-          return erro("O valor de x-admin-token nao confere com o segredo do servidor.", 401);
+          return erro("O valor de x-admin-token não confere com o segredo do servidor.", 401);
         }
         // Parametros ajustaveis pela chamada, para eu conseguir medir o tamanho
         // de lote que cabe no limite do plano antes de fixar um valor.
@@ -373,7 +379,7 @@ export default {
       // Medidor de consumo do provedor. Protegido: expoe o estado do motor.
       if (rota === "/api/admin/metrics") {
         const check = conferirAdmin(request, env);
-        if (check !== "ok") return erro("nao autorizado", check === "sem_segredo_no_servidor" ? 503 : 401);
+        if (check !== "ok") return erro("não autorizado", check === "sem_segredo_no_servidor" ? 503 : 401);
 
         const [limite, totais] = await Promise.all([
           estadoLimite(env.DB, env),
@@ -447,7 +453,7 @@ export default {
         if (check === "sem_segredo_no_servidor") {
           return erro("O segredo ADMIN_TOKEN nao esta configurado neste Worker.", 503);
         }
-        if (check !== "ok") return erro("nao autorizado", 401);
+        if (check !== "ok") return erro("não autorizado", 401);
 
         const ticker = (url.searchParams.get("ticker") || "").toUpperCase().trim();
         const range = url.searchParams.get("range") || "10y";
@@ -472,7 +478,7 @@ export default {
         if (check === "sem_segredo_no_servidor") {
           return erro("O segredo ADMIN_TOKEN nao esta configurado neste Worker.", 503);
         }
-        if (check !== "ok") return erro("nao autorizado", 401);
+        if (check !== "ok") return erro("não autorizado", 401);
 
         const ticker = (url.searchParams.get("ticker") || "").toUpperCase().trim();
         const predecessor = (url.searchParams.get("predecessor") || "").toUpperCase().trim() || null;
@@ -501,7 +507,7 @@ export default {
       // horario da varredura durante o desenvolvimento.
       if (rota === "/api/admin/apurar" && request.method === "POST") {
         const check = conferirAdmin(request, env);
-        if (check !== "ok") return erro("nao autorizado", check === "sem_segredo_no_servidor" ? 503 : 401);
+        if (check !== "ok") return erro("não autorizado", check === "sem_segredo_no_servidor" ? 503 : 401);
 
         const n = parseInt(url.searchParams.get("lote") || "10", 10);
         try {
@@ -517,7 +523,7 @@ export default {
 
       if (rota === "/api/admin/liberar" && request.method === "POST") {
         const check = conferirAdmin(request, env);
-        if (check !== "ok") return erro("nao autorizado", 401);
+        if (check !== "ok") return erro("não autorizado", 401);
         await liberar(env.DB);
         return json({ ok: true, mensagem: "recuo liberado" });
       }
@@ -533,7 +539,7 @@ export default {
       // Tabela da tela de consumo: uma linha por usuario.
       if (rota === "/api/admin/consumo") {
         const check = conferirAdmin(request, env);
-        if (check !== "ok") return erro("nao autorizado", check === "sem_segredo_no_servidor" ? 503 : 401);
+        if (check !== "ok") return erro("não autorizado", check === "sem_segredo_no_servidor" ? 503 : 401);
         try {
           // A cotacao vem do Dolar que carregamos na base, nao de um numero
           // fixo no codigo. Se ele ainda nao carregou, cai no padrao e a tela
@@ -571,7 +577,7 @@ export default {
       // Escolha de modelo por tipo de chamada.
       if (rota === "/api/admin/modelos" && request.method === "POST") {
         const check = conferirAdmin(request, env);
-        if (check !== "ok") return erro("nao autorizado", check === "sem_segredo_no_servidor" ? 503 : 401);
+        if (check !== "ok") return erro("não autorizado", check === "sem_segredo_no_servidor" ? 503 : 401);
         try {
           const corpo = await request.json();
           const feitos = [];
@@ -579,7 +585,7 @@ export default {
             if (!TIPOS[tipo]) continue;          // ignora campo que nao e tipo de chamada
             feitos.push(await gravarModelo(env.DB, tipo, modelo));
           }
-          if (!feitos.length) return erro("nenhum tipo de chamada valido no pedido", 400);
+          if (!feitos.length) return erro("nenhum tipo de chamada válido no pedido", 400);
           return json({ ok: true, gravados: feitos, modelos: await lerModelos(env.DB) });
         } catch (e) {
           return erro(String(e?.message || e).slice(0, 400), 400);
@@ -589,7 +595,7 @@ export default {
       // Ajuste manual da cota de um usuario.
       if (rota === "/api/admin/cota" && request.method === "POST") {
         const check = conferirAdmin(request, env);
-        if (check !== "ok") return erro("nao autorizado", check === "sem_segredo_no_servidor" ? 503 : 401);
+        if (check !== "ok") return erro("não autorizado", check === "sem_segredo_no_servidor" ? 503 : 401);
         try {
           const b = await request.json();
           const r = await ajustarCota(env.DB, b.user_id, {
@@ -605,7 +611,137 @@ export default {
         }
       }
 
-      if (rota.startsWith("/api/")) return erro("rota nao encontrada", 404);
+
+      /* ================================================================
+         ENTRAR COM GOOGLE
+
+         Nenhuma destas rotas pede segredo de administracao: sao o caminho
+         de entrada de qualquer pessoa. O que protege o retorno e o `state`.
+         ================================================================ */
+
+      // Passo 1: sorteia o state, guarda num cookie curto e manda para o Google.
+      if (rota === "/auth/google") {
+        const cfg = conferirConfig(env);
+        if (!cfg.pronto) {
+          return erro(
+            "O login com Google ainda não está configurado neste Worker. " +
+            "Faltam: " + cfg.faltando.join(" e ") + ". " +
+            "Defina em Settings, Variables and Secrets.",
+            503
+          );
+        }
+        const state = aleatorio(16);
+        return new Response(null, {
+          status: 302,
+          headers: {
+            location: urlAutorizacao(env, request.url, state),
+            // Dez minutos: tempo de escolher a conta, nao de deixar aberto.
+            "set-cookie": montarCookie(COOKIE_STATE, state, { maxAge: 600 }),
+            "cache-control": "no-store",
+          },
+        });
+      }
+
+      // Passo 3: o Google volta aqui.
+      if (rota === "/auth/google/callback") {
+        const paraEntrada = (motivo) =>
+          new Response(null, {
+            status: 302,
+            headers: {
+              location: "/entrar.html?erro=" + encodeURIComponent(motivo),
+              "set-cookie": montarCookie(COOKIE_STATE, "", { apagar: true }),
+              "cache-control": "no-store",
+            },
+          });
+
+        // A pessoa pode ter clicado em cancelar na tela do Google.
+        const recusa = url.searchParams.get("error");
+        if (recusa) {
+          return paraEntrada(recusa === "access_denied"
+            ? "Você cancelou a entrada pelo Google."
+            : "O Google recusou a entrada: " + recusa);
+        }
+
+        const code = url.searchParams.get("code");
+        const state = url.searchParams.get("state");
+        const esperado = lerCookie(request.headers.get("cookie"), COOKIE_STATE);
+
+        // Sem esta conferencia, um site qualquer poderia disparar este
+        // retorno e amarrar a sessao da vitima a uma conta do atacante.
+        if (!code || !state || !esperado || state !== esperado) {
+          return paraEntrada("A entrada expirou ou veio de um caminho inesperado. Tente de novo.");
+        }
+
+        try {
+          const tokens = await trocarCodigo(env, request.url, code);
+          const perfil = validarPerfil(lerIdToken(tokens.id_token), env);
+          const r = await entrar(env.DB, perfil, {
+            ip: request.headers.get("cf-connecting-ip"),
+            agente: request.headers.get("user-agent"),
+          });
+          const destino = r.usuario.papel === "admin" ? "/admin-consumo.html" : "/";
+          return new Response(null, {
+            status: 302,
+            headers: new Headers([
+              ["location", destino],
+              ["set-cookie", montarCookie(COOKIE_SESSAO, r.sessao, { maxAge: r.maxAge })],
+              ["set-cookie", montarCookie(COOKIE_STATE, "", { apagar: true })],
+              ["cache-control", "no-store"],
+            ]),
+          });
+        } catch (e) {
+          return paraEntrada(String(e?.message || e).slice(0, 200));
+        }
+      }
+
+      if (rota === "/auth/sair") {
+        await sair(env.DB, lerCookie(request.headers.get("cookie"), COOKIE_SESSAO));
+        return new Response(null, {
+          status: 302,
+          headers: {
+            location: "/entrar.html",
+            "set-cookie": montarCookie(COOKIE_SESSAO, "", { apagar: true }),
+            "cache-control": "no-store",
+          },
+        });
+      }
+
+      // Quem esta nesta sessao, e o que esta pessoa pode fazer.
+      if (rota === "/api/eu") {
+        const u = await lerSessao(env.DB, lerCookie(request.headers.get("cookie"), COOKIE_SESSAO));
+        if (!u) return json({ autenticado: false, login_configurado: conferirConfig(env).pronto });
+
+        const [assinatura, cota, ciclo] = await Promise.all([
+          env.DB.prepare(`SELECT * FROM subscriptions WHERE user_id = ?`).bind(u.id).first(),
+          env.DB.prepare(`SELECT * FROM ai_quota WHERE user_id = ?`).bind(u.id).first(),
+          env.DB.prepare(`SELECT * FROM ai_uso_ciclo WHERE user_id = ?`).bind(u.id).first(),
+        ]);
+        const n = nivel(u, assinatura);
+        const parecer = podePedirParecer(n, cota, ciclo, null);
+
+        return json({
+          autenticado: true,
+          usuario: { id: u.id, email: u.email, nome: u.nome, foto: u.foto_url, papel: u.papel },
+          admin: ehAdmin(u),
+          acesso: {
+            nivel: n,
+            pode_salvar: podeEscrever(n),
+            pode_usar_ia: podeGastarIA(n),
+            aviso: aviso(n, assinatura),
+          },
+          assinatura: assinatura
+            ? { plano: assinatura.plano, status: assinatura.status, proxima_cobranca: assinatura.proxima_cobranca }
+            : null,
+          cota: {
+            pareceres_usados: parecer.usados,
+            pareceres_limite: parecer.limite,
+            pareceres_restantes: parecer.restantes,
+            ciclo_fim: ciclo ? ciclo.ciclo_fim : null,
+          },
+        });
+      }
+
+      if (rota.startsWith("/api/")) return erro("rota não encontrada", 404);
 
       // Tudo que nao e API vai para os arquivos estaticos.
       return env.ASSETS.fetch(request);

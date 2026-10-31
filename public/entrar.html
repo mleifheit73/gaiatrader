@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Entrar · Gaia Trader</title>
+<meta name="description" content="Ferramenta de estudo de gráficos para swing trade e position trade na B3 e em criptoativos.">
+<link rel="stylesheet" href="tokens.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&family=Outfit:wght@500;600&display=swap">
+<style>
+  /* Cores, fontes e medidas vem de tokens.css. */
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--fg);font:var(--t-base)/1.6 var(--f-body);
+       display:flex;align-items:center;justify-content:center;padding:24px}
+
+  .cartao{width:100%;max-width:430px}
+
+  .marca{display:flex;align-items:baseline;gap:10px;margin-bottom:30px}
+  .marca .nome{font:600 26px/1 var(--f-marca);letter-spacing:.2em;text-transform:uppercase;
+               color:var(--brand)}
+  .marca .tipo{font:500 var(--t-meta)/1 var(--f-body);letter-spacing:.14em;text-transform:uppercase;
+               color:var(--muted)}
+
+  h1{font:600 var(--t-3xl)/1.2 var(--f-display);margin:0 0 8px;letter-spacing:-.015em}
+  .abertura{color:var(--muted);font-size:var(--t-lg);margin:0 0 26px}
+
+  .caixa{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:22px}
+
+  .entrar{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;
+          font:500 var(--t-lg)/1 var(--f-body);background:var(--fg);color:var(--bg);
+          border:0;border-radius:9px;padding:14px 18px;cursor:pointer;text-decoration:none}
+  .entrar:hover{filter:brightness(.92)}
+  .entrar:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+  .pe{margin-top:14px;font-size:var(--t-sm);color:var(--muted);text-align:center}
+
+  .erro{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--perigo);
+        border-radius:8px;padding:12px 14px;margin-bottom:18px;font-size:var(--t-sm)}
+  .erro b{color:var(--perigo);display:block;margin-bottom:2px}
+
+  .config{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--atencao);
+          border-radius:8px;padding:14px 16px;margin-bottom:18px;font-size:var(--t-sm)}
+  .config b{color:var(--atencao)}
+  .config code{font-family:var(--f-mono);font-size:var(--t-meta);background:var(--bg);
+               border:1px solid var(--line);border-radius:4px;padding:1px 5px}
+
+  .oque{margin-top:26px;font-size:var(--t-sm);color:var(--muted);line-height:1.75}
+  .oque b{color:var(--fg);font-weight:500}
+  .oque ul{margin:8px 0 0;padding-left:18px}
+  .oque li{margin-bottom:4px}
+
+  .aviso-legal{margin-top:24px;padding-top:16px;border-top:1px solid var(--line);
+               font-size:var(--t-meta);color:var(--muted);line-height:1.7}
+</style>
+</head>
+<body>
+<main class="cartao">
+
+  <div class="marca">
+    <span class="nome">Gaia</span>
+    <span class="tipo">Trader</span>
+  </div>
+
+  <h1>Entrar</h1>
+  <p class="abertura">Seus estudos, desenhos e o diário de trades ficam guardados na sua conta.</p>
+
+  <div id="erro" class="erro" hidden><b>Não deu para entrar</b><span id="erro-txt"></span></div>
+  <div id="config" class="config" hidden></div>
+
+  <div class="caixa">
+    <a class="entrar" id="botao" href="/auth/google">Entrar com a conta Google</a>
+    <div class="pe">Usamos seu nome, e-mail e foto. Nada além disso.</div>
+  </div>
+
+  <div class="oque">
+    <b>O que é o Gaia Trader</b>
+    <ul>
+      <li>Ferramenta de estudo de gráficos para swing trade e position trade</li>
+      <li>Ações da B3 e criptoativos, com fechamento diário</li>
+      <li>Seus traçados ficam salvos: dá para voltar semanas depois e conferir o estudo</li>
+    </ul>
+  </div>
+
+  <div class="aviso-legal">
+    Os gráficos são de fechamento diário, não são cotação em tempo real, e a
+    ferramenta não atende day trade. O Gaia Trader é material de estudo
+    técnico: não é recomendação de investimento e não promete resultado.
+    A decisão de operar é sua.
+  </div>
+
+</main>
+<script>
+  const p = new URLSearchParams(location.search);
+  const e = p.get("erro");
+  if (e) {
+    document.getElementById("erro-txt").textContent = e;
+    document.getElementById("erro").hidden = false;
+    history.replaceState(null, "", location.pathname);
+  }
+
+  // Se a pessoa ja esta na sessao, nao faz sentido mostrar a tela de entrada.
+  // E se o login ainda nao foi configurado no servidor, e melhor dizer isso
+  // aqui do que deixar o botao levar a um erro.
+  fetch("/api/eu", { headers: { accept: "application/json" } })
+    .then((r) => r.json())
+    .then((d) => {
+      if (d.autenticado) { location.replace(d.admin ? "/admin-consumo.html" : "/"); return; }
+      if (d.login_configurado === false) {
+        const c = document.getElementById("config");
+        c.innerHTML = "<b>Login ainda não configurado</b><br>" +
+          "Falta definir <code>GOOGLE_CLIENT_ID</code> e <code>GOOGLE_CLIENT_SECRET</code> " +
+          "nas variáveis do Worker, em Settings, Variables and Secrets.";
+        c.hidden = false;
+        document.getElementById("botao").setAttribute("aria-disabled", "true");
+        document.getElementById("botao").style.opacity = ".45";
+      }
+    })
+    .catch(() => { /* sem rede: o botao continua ali */ });
+</script>
+</body>
+</html>

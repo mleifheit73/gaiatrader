@@ -108,13 +108,13 @@
 <header>
   <div>
     <h1>Consumo de IA</h1>
-    <div class="sub">Medido no retorno da API, por chamada. Nao e estimativa.</div>
+    <div class="sub">Medido no retorno da API, por chamada. Não é estimativa.</div>
   </div>
   <div class="sub" id="carimbo"></div>
 </header>
 
 <div class="trava">
-  <label for="segredo">Segredo de administracao</label>
+  <label for="segredo">Segredo de administração</label>
   <input id="segredo" type="password" placeholder="x-admin-token" autocomplete="off">
   <button id="entrar">Carregar</button>
   <button id="recarregar" class="fraco" hidden>Atualizar</button>
@@ -128,23 +128,23 @@
   <div class="cartoes" id="cartoes"></div>
   <div class="sub" id="cotacao"></div>
 
-  <h2>Modelo por tipo de chamada <span class="nota">o que voce escolher aqui vale para todos os usuarios</span></h2>
+  <h2>Modelo por tipo de chamada <span class="nota">o que você escolher aqui vale para todos os usuários</span></h2>
   <div class="modelos" id="modelos"></div>
   <div id="modelos-msg"></div>
 
-  <h2>Consumo por usuario <span class="nota">ordenado por pareceres no ciclo</span></h2>
+  <h2>Consumo por usuário <span class="nota">ordenado por pareceres no ciclo</span></h2>
   <div class="rolagem">
     <table>
       <thead><tr>
-        <th>Usuario</th><th>Assinatura</th><th>Cota do ciclo</th>
-        <th class="n">Pareceres</th><th class="n">Perguntas</th><th class="n">Explicacoes</th>
-        <th class="n">Entrada</th><th class="n">Imagem</th><th class="n">Cache</th><th class="n">Saida</th>
+        <th>Usuário</th><th>Assinatura</th><th>Cota do ciclo</th>
+        <th class="n">Pareceres</th><th class="n">Perguntas</th><th class="n">Explicações</th>
+        <th class="n">Entrada</th><th class="n">Imagem</th><th class="n">Cache</th><th class="n">Saída</th>
         <th class="n">Custo no ciclo</th><th class="n">Custo total</th><th class="n">Falhas</th>
       </tr></thead>
       <tbody id="linhas"></tbody>
     </table>
   </div>
-  <div id="vazio" class="vazio" hidden>Nenhum usuario cadastrado ainda. A tabela se enche quando o primeiro login acontecer.</div>
+  <div id="vazio" class="vazio" hidden>Nenhum usuário cadastrado ainda. A tabela se enche quando o primeiro login acontecer.</div>
 
   <div class="rodape" id="rodape"></div>
 </div>
@@ -152,11 +152,11 @@
 <dialog id="dlg">
   <h3>Ajustar cota</h3>
   <div class="sub" id="dlg-quem"></div>
-  <div class="campo"><label for="f-mes">Pareceres por mes</label><input id="f-mes" type="number" min="1" class="num"></div>
+  <div class="campo"><label for="f-mes">Pareceres por mês</label><input id="f-mes" type="number" min="1" class="num"></div>
   <div class="campo"><label for="f-hora">Pareceres por hora</label><input id="f-hora" type="number" min="1" class="num"></div>
   <div class="campo"><label for="f-alerta">Avisar quando chegar em</label><input id="f-alerta" type="number" min="1" class="num"></div>
-  <div class="campo"><label for="f-motivo">Motivo do ajuste (obrigatorio)</label>
-    <textarea id="f-motivo" rows="2" placeholder="por que este usuario precisa de cota diferente"></textarea></div>
+  <div class="campo"><label for="f-motivo">Motivo do ajuste (obrigatório)</label>
+    <textarea id="f-motivo" rows="2" placeholder="por que este usuário precisa de cota diferente"></textarea></div>
   <div id="dlg-erro" class="erro"></div>
   <div class="acoes"><button class="fraco" id="dlg-cancelar">Cancelar</button><button id="dlg-salvar">Salvar</button></div>
 </dialog>
@@ -176,7 +176,7 @@ async function api(rota, opts = {}) {
     ...opts,
     headers: { "x-admin-token": SEGREDO, ...(opts.body ? { "content-type": "application/json" } : {}), ...(opts.headers || {}) },
   });
-  const corpo = await r.json().catch(() => ({ erro: "resposta ilegivel do servidor" }));
+  const corpo = await r.json().catch(() => ({ erro: "resposta ilegível do servidor" }));
   if (!r.ok) throw new Error(corpo.erro || ("erro " + r.status));
   return corpo;
 }
@@ -200,11 +200,11 @@ function desenhar() {
   const t = DADOS.totais;
 
   $("cartoes").innerHTML = [
-    ["Usuarios", nf(t.usuarios), nf(t.usuarios_ativos) + " ativos"],
+    ["Usuários", nf(t.usuarios), nf(t.usuarios_ativos) + " ativos"],
     ["Chamadas de IA", nf(t.chamadas), nf(t.falhas) + " falharam"],
     ["Pareceres", nf(t.pareceres), "a chamada cara"],
     ["Perguntas", nf(t.perguntas), "Pergunte ao Gaia"],
-    ["Explicacoes", nf(t.explicacoes), "Explicar com IA"],
+    ["Explicações", nf(t.explicacoes), "Explicar com IA"],
     ["Custo acumulado", brl(t.custo_brl), "US$ " + nf(t.custo_usd, 4)],
   ].map(([r, v, p]) =>
     `<div class="cartao"><div class="rot">${r}</div><div class="val">${v}</div><div class="pe">${p}</div></div>`
@@ -212,13 +212,13 @@ function desenhar() {
 
   const c = DADOS.cotacao;
   $("cotacao").textContent =
-    `Dolar usado para converter: R$ ${nf(c.usd_brl, 4)} (${c.origem}${c.data ? ", " + c.data : ""}).`;
+    `Dólar usado para converter: R$ ${nf(c.usd_brl, 4)} (${c.origem}${c.data ? ", " + c.data : ""}).`;
 
   // Alertas
   const al = DADOS.alertas || [];
   $("alertas").innerHTML = !al.length ? "" :
-    '<div class="aviso"><b>' + al.length + (al.length === 1 ? " usuario precisa" : " usuarios precisam") +
-    " de atencao.</b><br>" +
+    '<div class="aviso"><b>' + al.length + (al.length === 1 ? " usuário precisa" : " usuários precisam") +
+    " de atenção.</b><br>" +
     al.map((a) => esc(a.nome || a.email) + ": " + nf(a.pareceres) + " de " + nf(a.cota_mes) +
       " pareceres" + (a.estado === "bloqueado" ? " <b>(bloqueado)</b>" : " (perto do limite)")).join("<br>") +
     "</div>";
@@ -229,11 +229,11 @@ function desenhar() {
     const atual = cat.find((x) => x.id === m.modelo) || {};
     return `<div class="mod">
       <h3>${esc(m.rotulo)}</h3>
-      <p>${m.alterado ? "alterado do padrao" : "no padrao"}${m.invalido ? ' · <span class="selo ruim">modelo salvo invalido</span>' : ""}</p>
+      <p>${m.alterado ? "alterado do padrão" : "no padrão"}${m.invalido ? ' · <span class="selo ruim">modelo salvo inválido</span>' : ""}</p>
       <select data-tipo="${tipo}">
         ${cat.map((x) => `<option value="${x.id}"${x.id === m.modelo ? " selected" : ""}>${esc(x.nome)}</option>`).join("")}
       </select>
-      <div class="preco">entrada US$ ${nf(atual.entrada, 2)} · saida US$ ${nf(atual.saida, 2)} por milhao</div>
+      <div class="preco">entrada US$ ${nf(atual.entrada, 2)} · saída US$ ${nf(atual.saida, 2)} por milhão</div>
     </div>`;
   }).join("");
   document.querySelectorAll("#modelos select").forEach((s) => s.addEventListener("change", salvarModelo));
@@ -251,7 +251,7 @@ function desenhar() {
       <td><div class="cota">
             <div><span class="num">${nf(u.pareceres)} / ${nf(u.cota_mes)}</span>
               <div class="barra ${sel === "ok" ? "" : sel}"><i style="width:${Math.min(100, u.pct_cota)}%"></i></div></div>
-            <button class="fraco mini" data-ajustar="${esc(u.id)}" title="ajustar a cota deste usuario">Ajustar</button>
+            <button class="fraco mini" data-ajustar="${esc(u.id)}" title="ajustar a cota deste usuário">Ajustar</button>
           </div></td>
       <td class="n">${nf(u.pareceres)}</td>
       <td class="n">${nf(u.perguntas)}</td>
@@ -269,11 +269,11 @@ function desenhar() {
 
   const ajustados = us.filter((u) => u.motivo_ajuste);
   $("rodape").innerHTML =
-    "Entrada, imagem, cache e saida sao somas de todas as chamadas do usuario, desde sempre. " +
-    "O custo no ciclo e o do periodo de cobranca atual; o custo total e desde o cadastro.<br>" +
-    "A imagem e cobrada como entrada e aparece em coluna propria so para voce ver o peso dela.<br>" +
+    "Entrada, imagem, cache e saída são somas de todas as chamadas do usuário, desde sempre. " +
+    "O custo no ciclo é o do período de cobrança atual; o custo total é desde o cadastro.<br>" +
+    "A imagem é cobrada como entrada e aparece em coluna própria só para você ver o peso dela.<br>" +
     (ajustados.length
-      ? "<br><b>Cotas ajustadas a mao:</b><br>" + ajustados.map((u) =>
+      ? "<br><b>Cotas ajustadas à mão:</b><br>" + ajustados.map((u) =>
           esc(u.nome || u.email) + ": " + nf(u.cota_mes) + " pareceres, por " + esc(u.ajustado_por) +
           " em " + esc(u.ajustado_em) + ". Motivo: " + esc(u.motivo_ajuste)).join("<br>")
       : "");
@@ -285,7 +285,7 @@ async function salvarModelo(ev) {
   try {
     const r = await api("/api/admin/modelos", { method: "POST", body: JSON.stringify({ [tipo]: modelo }) });
     DADOS.modelos = r.modelos;
-    $("modelos-msg").innerHTML = '<div class="ok">Gravado. Vale para as proximas chamadas.</div>';
+    $("modelos-msg").innerHTML = '<div class="ok">Gravado. Vale para as próximas chamadas.</div>';
     desenhar();
   } catch (e) {
     $("modelos-msg").innerHTML = '<div class="erro">' + esc(e.message) + "</div>";
