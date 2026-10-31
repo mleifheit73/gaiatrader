@@ -28,6 +28,10 @@
   .trava{display:flex;gap:10px;flex-wrap:wrap;align-items:center;background:var(--panel);
          border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:8px}
   .trava label{font-size:var(--t-sm);color:var(--muted)}
+  .barra-topo{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+  .sair{font:500 var(--t-sm)/1 var(--f-body);padding:9px 15px;border-radius:7px;
+        border:1px solid var(--linha-forte);color:var(--accent);text-decoration:none}
+  .sair:hover{background:var(--accent-soft)}
   input,select,textarea{font:var(--t-sm)/1.4 var(--f-body);color:var(--fg);background:var(--bg);
          border:1px solid var(--linha-forte);border-radius:7px;padding:7px 10px}
   input[type=password],input[type=text]{min-width:230px}
@@ -113,12 +117,18 @@
   <div class="sub" id="carimbo"></div>
 </header>
 
-<div class="trava">
+<div class="trava" id="trava" hidden>
   <label for="segredo">Segredo de administração</label>
   <input id="segredo" type="password" placeholder="x-admin-token" autocomplete="off">
   <button id="entrar">Carregar</button>
-  <button id="recarregar" class="fraco" hidden>Atualizar</button>
   <span id="trava-msg" class="sub"></span>
+</div>
+
+<div class="barra-topo" id="barra-topo" hidden>
+  <span class="sub" id="quem"></span>
+  <span style="flex:1"></span>
+  <button id="recarregar" class="fraco">Atualizar</button>
+  <a class="fraco sair" href="/auth/sair">Sair</a>
 </div>
 
 <div id="conteudo" hidden>
@@ -172,9 +182,14 @@ const mil = (n) => { n = n ?? 0; return n >= 1e6 ? nf(n / 1e6, 1) + "M" : n >= 1
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 async function api(rota, opts = {}) {
+  // Sem segredo digitado, a sessao do navegador basta: o cookie vai sozinho.
   const r = await fetch(rota, {
     ...opts,
-    headers: { "x-admin-token": SEGREDO, ...(opts.body ? { "content-type": "application/json" } : {}), ...(opts.headers || {}) },
+    headers: {
+      ...(SEGREDO ? { "x-admin-token": SEGREDO } : {}),
+      ...(opts.body ? { "content-type": "application/json" } : {}),
+      ...(opts.headers || {}),
+    },
   });
   const corpo = await r.json().catch(() => ({ erro: "resposta ilegível do servidor" }));
   if (!r.ok) throw new Error(corpo.erro || ("erro " + r.status));
@@ -185,14 +200,17 @@ async function carregar() {
   $("trava-msg").textContent = "carregando...";
   try {
     DADOS = await api("/api/admin/consumo");
-    SEGREDO && sessionStorage.setItem("gt_admin", SEGREDO);
+    if (SEGREDO) { try { sessionStorage.setItem("gt_admin", SEGREDO); } catch (e) {} }
+    $("trava").hidden = true;
+    $("barra-topo").hidden = false;
     $("conteudo").hidden = false;
-    $("recarregar").hidden = false;
     $("trava-msg").textContent = "";
     $("carimbo").textContent = "atualizado " + new Date().toLocaleString("pt-BR");
     desenhar();
+    return true;
   } catch (e) {
     $("trava-msg").innerHTML = '<span class="erro">' + esc(e.message) + "</span>";
+    return false;
   }
 }
 
@@ -326,11 +344,29 @@ $("entrar").addEventListener("click", () => { SEGREDO = $("segredo").value.trim(
 $("segredo").addEventListener("keydown", (e) => { if (e.key === "Enter") $("entrar").click(); });
 $("recarregar").addEventListener("click", carregar);
 
-// O segredo fica so na aba aberta, nao no disco: fechou a aba, foi embora.
-try {
-  const g = sessionStorage.getItem("gt_admin");
-  if (g) { SEGREDO = g; $("segredo").value = g; carregar(); }
-} catch (e) { /* aba anonima, segue sem */ }
+/*
+ * Primeiro tenta pela SESSAO: quem entrou pelo Google como administrador nao
+ * precisa de segundo segredo. So se isso falhar e que a caixa do segredo
+ * aparece, para chamada de script ou para o caso de o login estar fora.
+ */
+(async () => {
+  const eu = await fetch("/api/eu").then((r) => r.json()).catch(() => ({}));
+  if (eu.autenticado) {
+    $("quem").textContent = (eu.usuario.nome || eu.usuario.email) +
+      (eu.admin ? " · administrador" : "");
+  }
+  if (await carregar()) return;
+
+  // A sessao nao serviu. Volta para o segredo.
+  $("trava").hidden = false;
+  $("trava-msg").innerHTML = eu.autenticado
+    ? '<span class="erro">Sua conta nao tem permissao de administrador.</span>'
+    : '<span class="sub">Entre com uma conta de administrador, ou use o segredo.</span>';
+  try {
+    const g = sessionStorage.getItem("gt_admin");
+    if (g) { SEGREDO = g; $("segredo").value = g; carregar(); }
+  } catch (e) { /* aba anonima, segue sem */ }
+})();
 </script>
 </body>
 </html>

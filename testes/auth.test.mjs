@@ -11,6 +11,7 @@ import { bancoDeTeste } from "./ajuda-d1.mjs";
 import {
   hash, lerCookie, montarCookie, conferirConfig, urlAutorizacao, urlDeRetorno,
   trocarCodigo, lerIdToken, validarPerfil, entrar, lerSessao, sair, limparSessoes,
+  fimDoCiclo,
   COOKIE_SESSAO, COOKIE_STATE,
 } from "../src/auth.js";
 import { gravarAdmins } from "../src/acesso.js";
@@ -270,6 +271,90 @@ const perfilGoogle = (extra = {}) => ({
   ok("o hash e estavel", (await hash("abc")) === (await hash("abc")));
   ok("entradas diferentes dao hashes diferentes", (await hash("abc")) !== (await hash("abd")));
   ok("o hash nao contem a entrada", !(await hash("segredo")).includes("segredo"));
+}
+
+/* ---- Ciclo de cobranca: as bordas do calendario ------------------------- */
+
+{
+  /*
+   * A versao ingenua disto (setUTCMonth(mes + 1)) parece certa e esta errada
+   * nas bordas, porque o JavaScript transborda em silencio quando o dia nao
+   * existe no mes de destino. O Marcelo se cadastrou num dia 31 e o defeito
+   * apareceu na primeira linha gravada no banco de producao.
+   */
+  const casos = [
+    ["2026-01-15", "2026-02-15", "mes comum, dia que existe nos dois"],
+    ["2026-01-29", "2026-02-28", "29/01 em ano comum: fevereiro nao tem 29"],
+    ["2026-01-30", "2026-02-28", "30/01: prende no ultimo de fevereiro"],
+    ["2026-01-31", "2026-02-28", "31/01: prende no ultimo de fevereiro"],
+    ["2024-01-31", "2024-02-29", "31/01 em ano BISSEXTO: fevereiro tem 29"],
+    ["2026-03-31", "2026-04-30", "31/03: abril tem 30"],
+    ["2026-05-31", "2026-06-30", "31/05: junho tem 30"],
+    ["2026-08-31", "2026-09-30", "31/08: setembro tem 30"],
+    ["2026-10-31", "2026-11-30", "31/10: novembro tem 30, o caso do Marcelo"],
+    ["2026-12-15", "2027-01-15", "virada de ano"],
+    ["2026-12-31", "2027-01-31", "31/12: janeiro tem 31, nao prende"],
+  ];
+  let erros = 0;
+  for (const [de, esperado, porque] of casos) {
+    const veio = fimDoCiclo(de);
+    if (veio !== esperado) {
+      erros++;
+      console.log(`   ${de} -> ${veio}, esperado ${esperado}  (${porque})`);
+    }
+  }
+  ok("o ciclo prende o dia ao ultimo do mes alvo, nas 11 bordas", erros === 0);
+
+  // A prova que mais importa: nenhum ciclo pode pular um mes inteiro.
+  let pulou = null;
+  for (let m = 1; m <= 12; m++) {
+    for (const dia of [28, 29, 30, 31]) {
+      const ini = `2026-${String(m).padStart(2, "0")}-${dia}`;
+      // O JavaScript aceita "2026-02-29" e rola para marco em silencio, entao
+      // conferir por NaN nao basta: a data precisa sobreviver a ida e volta.
+      const t = new Date(ini + "T00:00:00Z");
+      if (Number.isNaN(t.getTime()) || t.toISOString().slice(0, 10) !== ini) continue;
+      const fim = fimDoCiclo(ini);
+      const mesIni = Number(ini.slice(5, 7)), mesFim = Number(fim.slice(5, 7));
+      const avanco = (mesFim - mesIni + 12) % 12;
+      if (avanco !== 1) { pulou = `${ini} -> ${fim}`; break; }
+    }
+    if (pulou) break;
+  }
+  ok("nenhum ciclo avanca mais de um mes", pulou === null,
+     pulou ? `pulou em ${pulou}` : "testado dia 28 a 31 de todos os meses de 2026");
+
+  let curto = null;
+  for (let m = 1; m <= 12; m++) {
+    const ini = `2026-${String(m).padStart(2, "0")}-15`;
+    const dias = (Date.parse(fimDoCiclo(ini)) - Date.parse(ini)) / 86400000;
+    if (dias < 28 || dias > 31) { curto = `${ini}: ${dias} dias`; break; }
+  }
+  ok("todo ciclo tem entre 28 e 31 dias", curto === null, curto || "");
+}
+
+{
+  // E o que o usuario novo recebe de verdade.
+  const d1 = bancoDeTeste();
+  await gravarAdmins(d1, ["mleifheit@gmail.com"]);
+  const agora = new Date("2026-10-31T04:25:00Z");
+  const r = await entrar(d1, validarPerfil(perfilGoogle(), ENV), { agora });
+  const s = d1.cru.prepare("SELECT * FROM subscriptions WHERE user_id=?").get(r.usuario.id);
+  ok("quem assina dia 31 de outubro tem o ciclo ate 30 de novembro",
+     s.proxima_cobranca === "2026-11-30", `veio ${s.proxima_cobranca}`);
+  const c = d1.cru.prepare("SELECT * FROM ai_uso_ciclo WHERE user_id=?").get(r.usuario.id);
+  ok("o ciclo de uso termina na mesma data da cobranca",
+     c.ciclo_fim === s.proxima_cobranca);
+}
+
+{
+  const recusa = (d) => { try { fimDoCiclo(d); return null; } catch (e) { return e.message; } };
+  ok("data que nao existe no calendario e recusada",
+     /invalida/.test(recusa("2026-02-29") || ""),
+     "o JavaScript aceitaria e rolaria para marco em silencio");
+  ok("29 de fevereiro em ano bissexto e aceito", fimDoCiclo("2024-02-29") === "2024-03-29");
+  ok("texto que nao e data e recusado", /invalida/.test(recusa("qualquer coisa") || ""));
+  ok("mes 13 e recusado", /invalida/.test(recusa("2026-13-01") || ""));
 }
 
 console.log(falhas === 0 ? "\nTODOS OS TESTES PASSARAM" : `\n${falhas} TESTE(S) FALHARAM`);

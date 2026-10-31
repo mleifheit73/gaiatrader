@@ -189,11 +189,39 @@ export function validarPerfil(p, env, agora = Date.now()) {
    ENTRAR
    ======================================================================== */
 
-/** Primeiro dia do proximo ciclo, a partir de uma data. */
-function fimDoCiclo(inicio) {
+/**
+ * Primeiro dia do proximo ciclo, a partir de uma data.
+ *
+ * PRENDE O DIA AO ULTIMO DO MES ALVO. A versao ingenua disto
+ * (`setUTCMonth(mes + 1)`) parece certa e esta errada nas bordas, porque o
+ * JavaScript transborda em silencio quando o dia nao existe no mes de
+ * destino:
+ *
+ *   31/10 -> 31/11 nao existe -> vira 01/12
+ *   29/01 -> 29/02 nao existe em ano comum -> vira 01/03, PULANDO fevereiro
+ *
+ * Quem assinasse dia 29, 30 ou 31 teria o ciclo escorregando um pouco todo
+ * mes, e no caso de janeiro ganharia dois meses de cota de graca. Nenhum
+ * desses casos daria erro: a data sairia plausivel e errada.
+ */
+export function fimDoCiclo(inicio) {
   const d = new Date(inicio + "T00:00:00Z");
-  d.setUTCMonth(d.getUTCMonth() + 1);
-  return d.toISOString().slice(0, 10);
+  /*
+   * O JavaScript ACEITA data que nao existe e rola em silencio: "2026-02-29"
+   * vira 1 de marco, sem erro. Se isso entrasse aqui, sairia um ciclo
+   * plausivel e errado. Entao conferimos se a data sobreviveu inteira a ida
+   * e volta; se nao sobreviveu, e porque nao existia.
+   */
+  if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== inicio) {
+    throw new Error(`data de inicio de ciclo invalida: ${inicio}`);
+  }
+  const dia = d.getUTCDate();
+  const ano = d.getUTCFullYear();
+  const mes = d.getUTCMonth() + 1;            // mes alvo, podendo ser 12
+  // Dia 0 do mes seguinte = ultimo dia do mes alvo.
+  const ultimoDoAlvo = new Date(Date.UTC(ano, mes + 1, 0)).getUTCDate();
+  return new Date(Date.UTC(ano, mes, Math.min(dia, ultimoDoAlvo)))
+    .toISOString().slice(0, 10);
 }
 
 /**

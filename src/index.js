@@ -52,7 +52,24 @@ const erro = (msg, status = 400) => json({ erro: msg }, status);
  * diagnosticar de fora. Distinguir os dois nao vaza nada util para um atacante:
  * ele descobre apenas que o servidor esta mal configurado, nunca o valor.
  */
-function conferirAdmin(request, env) {
+async function conferirAdmin(request, env) {
+  /*
+   * DOIS CAMINHOS, de proposito.
+   *
+   * 1. Sessao de administrador. Quem entrou pelo Google e tem papel de
+   *    admin ja provou quem e. Pedir um segundo segredo para a mesma
+   *    pessoa na mesma sessao nao acrescenta seguranca nenhuma: so faz o
+   *    dono do sistema guardar um token em algum lugar, que e onde token
+   *    vaza.
+   *
+   * 2. Segredo no cabecalho. Continua valendo, para chamada de script,
+   *    curl e para o caso de o login estar fora do ar.
+   */
+  try {
+    const u = await lerSessao(env.DB, lerCookie(request.headers.get("cookie"), COOKIE_SESSAO));
+    if (u && ehAdmin(u) && u.ativo !== 0) return "ok";
+  } catch (e) { /* sem banco ou sem sessao: cai no segredo abaixo */ }
+
   const esperado = env.ADMIN_TOKEN;
   if (!esperado) return "sem_segredo_no_servidor";
 
@@ -346,7 +363,7 @@ export default {
       // Dispara uma carga manualmente, para nao depender do horario do agendamento
       // durante o desenvolvimento. Protegido por segredo.
       if (rota === "/api/admin/ingest" && request.method === "POST") {
-        const check = conferirAdmin(request, env);
+        const check = await conferirAdmin(request, env);
         if (check === "sem_segredo_no_servidor") {
           return erro(
             "O segredo ADMIN_TOKEN não está configurado neste Worker. " +
@@ -355,7 +372,7 @@ export default {
           );
         }
         if (check === "sem_cabecalho") {
-          return erro("Faltou o cabeçalho x-admin-token na requisição.", 401);
+          return erro("Entre com uma conta de administrador, ou envie o cabeçalho x-admin-token.", 401);
         }
         if (check !== "ok") {
           return erro("O valor de x-admin-token não confere com o segredo do servidor.", 401);
@@ -378,7 +395,7 @@ export default {
 
       // Medidor de consumo do provedor. Protegido: expoe o estado do motor.
       if (rota === "/api/admin/metrics") {
-        const check = conferirAdmin(request, env);
+        const check = await conferirAdmin(request, env);
         if (check !== "ok") return erro("não autorizado", check === "sem_segredo_no_servidor" ? 503 : 401);
 
         const [limite, totais] = await Promise.all([
@@ -449,7 +466,7 @@ export default {
       // Serve tambem para emendar o historico de um codigo antigo da B3 e para
       // reparar um ativo sem esperar o ciclo diario.
       if (rota === "/api/admin/recarregar" && request.method === "POST") {
-        const check = conferirAdmin(request, env);
+        const check = await conferirAdmin(request, env);
         if (check === "sem_segredo_no_servidor") {
           return erro("O segredo ADMIN_TOKEN nao esta configurado neste Worker.", 503);
         }
@@ -474,7 +491,7 @@ export default {
       // emendar serie errado nao da erro nenhum: so cria um degrau de preco que
       // todo indicador le como rompimento, e ninguem descobre por meses.
       if (rota === "/api/admin/costurar" && request.method === "POST") {
-        const check = conferirAdmin(request, env);
+        const check = await conferirAdmin(request, env);
         if (check === "sem_segredo_no_servidor") {
           return erro("O segredo ADMIN_TOKEN nao esta configurado neste Worker.", 503);
         }
@@ -506,7 +523,7 @@ export default {
       // Dispara a apuracao de um lote manualmente, para nao depender do
       // horario da varredura durante o desenvolvimento.
       if (rota === "/api/admin/apurar" && request.method === "POST") {
-        const check = conferirAdmin(request, env);
+        const check = await conferirAdmin(request, env);
         if (check !== "ok") return erro("não autorizado", check === "sem_segredo_no_servidor" ? 503 : 401);
 
         const n = parseInt(url.searchParams.get("lote") || "10", 10);
@@ -522,7 +539,7 @@ export default {
       }
 
       if (rota === "/api/admin/liberar" && request.method === "POST") {
-        const check = conferirAdmin(request, env);
+        const check = await conferirAdmin(request, env);
         if (check !== "ok") return erro("não autorizado", 401);
         await liberar(env.DB);
         return json({ ok: true, mensagem: "recuo liberado" });
@@ -538,7 +555,7 @@ export default {
 
       // Tabela da tela de consumo: uma linha por usuario.
       if (rota === "/api/admin/consumo") {
-        const check = conferirAdmin(request, env);
+        const check = await conferirAdmin(request, env);
         if (check !== "ok") return erro("não autorizado", check === "sem_segredo_no_servidor" ? 503 : 401);
         try {
           // A cotacao vem do Dolar que carregamos na base, nao de um numero
@@ -576,7 +593,7 @@ export default {
 
       // Escolha de modelo por tipo de chamada.
       if (rota === "/api/admin/modelos" && request.method === "POST") {
-        const check = conferirAdmin(request, env);
+        const check = await conferirAdmin(request, env);
         if (check !== "ok") return erro("não autorizado", check === "sem_segredo_no_servidor" ? 503 : 401);
         try {
           const corpo = await request.json();
@@ -594,7 +611,7 @@ export default {
 
       // Ajuste manual da cota de um usuario.
       if (rota === "/api/admin/cota" && request.method === "POST") {
-        const check = conferirAdmin(request, env);
+        const check = await conferirAdmin(request, env);
         if (check !== "ok") return erro("não autorizado", check === "sem_segredo_no_servidor" ? 503 : 401);
         try {
           const b = await request.json();
