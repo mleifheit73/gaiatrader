@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gaia Trader · Consumo de IA</title>
+<link rel="stylesheet" href="tokens.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  /* Cores, fontes e medidas vem de tokens.css. Nao redeclarar :root aqui:
+     valor duplicado desalinha do resto do sistema. */
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font:var(--t-base)/1.55 var(--f-body)}
+  .wrap{max-width:1240px;margin:0 auto;padding:26px 18px 72px}
+
+  header{display:flex;flex-wrap:wrap;gap:14px;align-items:baseline;justify-content:space-between;
+         padding-bottom:14px;border-bottom:1px solid var(--line);margin-bottom:22px}
+  h1{font:600 var(--t-3xl)/1.2 var(--f-display);margin:0;letter-spacing:-.01em}
+  .sub{color:var(--muted);font-size:var(--t-sm)}
+  h2{font:600 var(--t-2xl)/1.25 var(--f-display);margin:30px 0 12px;letter-spacing:-.005em}
+  h2 .nota{font:400 var(--t-sm)/1.4 var(--f-body);color:var(--muted);margin-left:8px}
+
+  .num{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+
+  /* Barra de segredo */
+  .trava{display:flex;gap:10px;flex-wrap:wrap;align-items:center;background:var(--panel);
+         border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:8px}
+  .trava label{font-size:var(--t-sm);color:var(--muted)}
+  input,select,textarea{font:var(--t-sm)/1.4 var(--f-body);color:var(--fg);background:var(--bg);
+         border:1px solid var(--linha-forte);border-radius:7px;padding:7px 10px}
+  input[type=password],input[type=text]{min-width:230px}
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:1px}
+  button{font:500 var(--t-sm)/1 var(--f-body);background:var(--accent);color:#fff;border:0;
+         border-radius:7px;padding:9px 15px;cursor:pointer}
+  button:hover{filter:brightness(1.08)}
+  button:disabled{opacity:.5;cursor:default}
+  button.fraco{background:transparent;color:var(--accent);border:1px solid var(--linha-forte)}
+
+  /* Cartoes de total */
+  .cartoes{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:12px;margin:16px 0 4px}
+  .cartao{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+  .cartao .rot{font-size:var(--t-micro);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+  .cartao .val{font-family:var(--f-mono);font-size:var(--t-2xl);font-variant-numeric:tabular-nums;
+               margin-top:5px;font-weight:600}
+  .cartao .pe{font-size:var(--t-meta);color:var(--muted);margin-top:2px}
+
+  /* Tabela */
+  .rolagem{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
+  table{border-collapse:collapse;width:100%;min-width:1010px}
+  th,td{padding:9px 10px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+  th{font-size:var(--t-micro);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);
+     font-weight:600;position:sticky;top:0;background:var(--panel)}
+  td.n{text-align:right;font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+  tbody tr:last-child td{border-bottom:0}
+  tbody tr:hover{background:var(--accent-soft)}
+  tr.alerta td:first-child{box-shadow:inset 3px 0 0 var(--atencao)}
+  tr.bloqueado td:first-child{box-shadow:inset 3px 0 0 var(--perigo)}
+
+  .pessoa{display:flex;flex-direction:column;gap:1px}
+  .pessoa b{font-weight:600}
+  .pessoa span{font-size:var(--t-meta);color:var(--muted)}
+
+  .selo{display:inline-block;font-size:var(--t-micro);font-weight:600;letter-spacing:.04em;
+        padding:2px 8px;border-radius:999px;border:1px solid}
+  .selo.ok{color:var(--ok);border-color:var(--ok)}
+  .selo.aviso{color:var(--atencao);border-color:var(--atencao)}
+  .selo.ruim{color:var(--perigo);border-color:var(--perigo)}
+  .selo.neutro{color:var(--muted);border-color:var(--line)}
+
+  .barra{position:relative;height:6px;border-radius:999px;background:var(--line);
+         width:92px;margin-top:5px;overflow:hidden}
+  .cota{display:flex;align-items:center;gap:10px}
+  button.mini{padding:5px 10px;font-size:var(--t-micro)}
+  .barra i{position:absolute;inset:0 auto 0 0;border-radius:999px;background:var(--accent)}
+  .barra.aviso i{background:var(--atencao)} .barra.ruim i{background:var(--perigo)}
+
+  /* Seletor de modelo */
+  .modelos{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:12px}
+  .mod{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+  .mod h3{font:600 var(--t-lg)/1.3 var(--f-display);margin:0 0 3px}
+  .mod p{margin:0 0 10px;font-size:var(--t-meta);color:var(--muted)}
+  .mod select{width:100%}
+  .mod .preco{margin-top:8px;font-family:var(--f-mono);font-size:var(--t-meta);color:var(--muted);
+              font-variant-numeric:tabular-nums}
+
+  .aviso{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--atencao);
+         border-radius:8px;padding:12px 14px;margin:14px 0;font-size:var(--t-sm)}
+  .aviso b{color:var(--atencao)}
+  .vazio{padding:34px 18px;text-align:center;color:var(--muted);font-size:var(--t-sm)}
+  .erro{color:var(--perigo);font-size:var(--t-sm);margin-top:8px}
+  .ok{color:var(--ok);font-size:var(--t-sm);margin-top:8px}
+  .rodape{margin-top:30px;padding-top:14px;border-top:1px solid var(--line);
+          font-size:var(--t-meta);color:var(--muted);line-height:1.7}
+  dialog{background:var(--panel);color:var(--fg);border:1px solid var(--linha-forte);
+         border-radius:12px;padding:20px;max-width:430px;width:92vw}
+  dialog::backdrop{background:#0008}
+  dialog h3{font:600 var(--t-xl)/1.3 var(--f-display);margin:0 0 4px}
+  dialog .campo{margin-top:13px} dialog label{display:block;font-size:var(--t-meta);color:var(--muted);margin-bottom:4px}
+  dialog input,dialog textarea{width:100%}
+  dialog .acoes{display:flex;gap:9px;justify-content:flex-end;margin-top:18px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div>
+    <h1>Consumo de IA</h1>
+    <div class="sub">Medido no retorno da API, por chamada. Nao e estimativa.</div>
+  </div>
+  <div class="sub" id="carimbo"></div>
+</header>
+
+<div class="trava">
+  <label for="segredo">Segredo de administracao</label>
+  <input id="segredo" type="password" placeholder="x-admin-token" autocomplete="off">
+  <button id="entrar">Carregar</button>
+  <button id="recarregar" class="fraco" hidden>Atualizar</button>
+  <span id="trava-msg" class="sub"></span>
+</div>
+
+<div id="conteudo" hidden>
+
+  <div id="alertas"></div>
+
+  <div class="cartoes" id="cartoes"></div>
+  <div class="sub" id="cotacao"></div>
+
+  <h2>Modelo por tipo de chamada <span class="nota">o que voce escolher aqui vale para todos os usuarios</span></h2>
+  <div class="modelos" id="modelos"></div>
+  <div id="modelos-msg"></div>
+
+  <h2>Consumo por usuario <span class="nota">ordenado por pareceres no ciclo</span></h2>
+  <div class="rolagem">
+    <table>
+      <thead><tr>
+        <th>Usuario</th><th>Assinatura</th><th>Cota do ciclo</th>
+        <th class="n">Pareceres</th><th class="n">Perguntas</th><th class="n">Explicacoes</th>
+        <th class="n">Entrada</th><th class="n">Imagem</th><th class="n">Cache</th><th class="n">Saida</th>
+        <th class="n">Custo no ciclo</th><th class="n">Custo total</th><th class="n">Falhas</th>
+      </tr></thead>
+      <tbody id="linhas"></tbody>
+    </table>
+  </div>
+  <div id="vazio" class="vazio" hidden>Nenhum usuario cadastrado ainda. A tabela se enche quando o primeiro login acontecer.</div>
+
+  <div class="rodape" id="rodape"></div>
+</div>
+
+<dialog id="dlg">
+  <h3>Ajustar cota</h3>
+  <div class="sub" id="dlg-quem"></div>
+  <div class="campo"><label for="f-mes">Pareceres por mes</label><input id="f-mes" type="number" min="1" class="num"></div>
+  <div class="campo"><label for="f-hora">Pareceres por hora</label><input id="f-hora" type="number" min="1" class="num"></div>
+  <div class="campo"><label for="f-alerta">Avisar quando chegar em</label><input id="f-alerta" type="number" min="1" class="num"></div>
+  <div class="campo"><label for="f-motivo">Motivo do ajuste (obrigatorio)</label>
+    <textarea id="f-motivo" rows="2" placeholder="por que este usuario precisa de cota diferente"></textarea></div>
+  <div id="dlg-erro" class="erro"></div>
+  <div class="acoes"><button class="fraco" id="dlg-cancelar">Cancelar</button><button id="dlg-salvar">Salvar</button></div>
+</dialog>
+
+</div>
+<script>
+const $ = (id) => document.getElementById(id);
+let SEGREDO = "", DADOS = null;
+
+const nf = (n, c = 0) => (n ?? 0).toLocaleString("pt-BR", { minimumFractionDigits: c, maximumFractionDigits: c });
+const brl = (n) => "R$ " + nf(n, n < 10 ? 4 : 2);
+const mil = (n) => { n = n ?? 0; return n >= 1e6 ? nf(n / 1e6, 1) + "M" : n >= 1e3 ? nf(n / 1e3, 1) + "k" : nf(n); };
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+async function api(rota, opts = {}) {
+  const r = await fetch(rota, {
+    ...opts,
+    headers: { "x-admin-token": SEGREDO, ...(opts.body ? { "content-type": "application/json" } : {}), ...(opts.headers || {}) },
+  });
+  const corpo = await r.json().catch(() => ({ erro: "resposta ilegivel do servidor" }));
+  if (!r.ok) throw new Error(corpo.erro || ("erro " + r.status));
+  return corpo;
+}
+
+async function carregar() {
+  $("trava-msg").textContent = "carregando...";
+  try {
+    DADOS = await api("/api/admin/consumo");
+    SEGREDO && sessionStorage.setItem("gt_admin", SEGREDO);
+    $("conteudo").hidden = false;
+    $("recarregar").hidden = false;
+    $("trava-msg").textContent = "";
+    $("carimbo").textContent = "atualizado " + new Date().toLocaleString("pt-BR");
+    desenhar();
+  } catch (e) {
+    $("trava-msg").innerHTML = '<span class="erro">' + esc(e.message) + "</span>";
+  }
+}
+
+function desenhar() {
+  const t = DADOS.totais;
+
+  $("cartoes").innerHTML = [
+    ["Usuarios", nf(t.usuarios), nf(t.usuarios_ativos) + " ativos"],
+    ["Chamadas de IA", nf(t.chamadas), nf(t.falhas) + " falharam"],
+    ["Pareceres", nf(t.pareceres), "a chamada cara"],
+    ["Perguntas", nf(t.perguntas), "Pergunte ao Gaia"],
+    ["Explicacoes", nf(t.explicacoes), "Explicar com IA"],
+    ["Custo acumulado", brl(t.custo_brl), "US$ " + nf(t.custo_usd, 4)],
+  ].map(([r, v, p]) =>
+    `<div class="cartao"><div class="rot">${r}</div><div class="val">${v}</div><div class="pe">${p}</div></div>`
+  ).join("");
+
+  const c = DADOS.cotacao;
+  $("cotacao").textContent =
+    `Dolar usado para converter: R$ ${nf(c.usd_brl, 4)} (${c.origem}${c.data ? ", " + c.data : ""}).`;
+
+  // Alertas
+  const al = DADOS.alertas || [];
+  $("alertas").innerHTML = !al.length ? "" :
+    '<div class="aviso"><b>' + al.length + (al.length === 1 ? " usuario precisa" : " usuarios precisam") +
+    " de atencao.</b><br>" +
+    al.map((a) => esc(a.nome || a.email) + ": " + nf(a.pareceres) + " de " + nf(a.cota_mes) +
+      " pareceres" + (a.estado === "bloqueado" ? " <b>(bloqueado)</b>" : " (perto do limite)")).join("<br>") +
+    "</div>";
+
+  // Seletor de modelo
+  const cat = DADOS.catalogo;
+  $("modelos").innerHTML = Object.entries(DADOS.modelos).map(([tipo, m]) => {
+    const atual = cat.find((x) => x.id === m.modelo) || {};
+    return `<div class="mod">
+      <h3>${esc(m.rotulo)}</h3>
+      <p>${m.alterado ? "alterado do padrao" : "no padrao"}${m.invalido ? ' · <span class="selo ruim">modelo salvo invalido</span>' : ""}</p>
+      <select data-tipo="${tipo}">
+        ${cat.map((x) => `<option value="${x.id}"${x.id === m.modelo ? " selected" : ""}>${esc(x.nome)}</option>`).join("")}
+      </select>
+      <div class="preco">entrada US$ ${nf(atual.entrada, 2)} · saida US$ ${nf(atual.saida, 2)} por milhao</div>
+    </div>`;
+  }).join("");
+  document.querySelectorAll("#modelos select").forEach((s) => s.addEventListener("change", salvarModelo));
+
+  // Tabela
+  const us = DADOS.usuarios || [];
+  $("vazio").hidden = us.length > 0;
+  $("linhas").innerHTML = us.map((u) => {
+    const sel = u.estado === "bloqueado" ? "ruim" : u.estado === "alerta" ? "aviso" : "ok";
+    const assin = u.assinatura || "sem assinatura";
+    const selAssin = assin === "ativa" || assin === "beta" ? "ok" : assin === "sem assinatura" ? "neutro" : "aviso";
+    return `<tr class="${u.estado}">
+      <td><div class="pessoa"><b>${esc(u.nome || "(sem nome)")}</b><span>${esc(u.email)}</span></div></td>
+      <td><span class="selo ${selAssin}">${esc(assin)}</span></td>
+      <td><div class="cota">
+            <div><span class="num">${nf(u.pareceres)} / ${nf(u.cota_mes)}</span>
+              <div class="barra ${sel === "ok" ? "" : sel}"><i style="width:${Math.min(100, u.pct_cota)}%"></i></div></div>
+            <button class="fraco mini" data-ajustar="${esc(u.id)}" title="ajustar a cota deste usuario">Ajustar</button>
+          </div></td>
+      <td class="n">${nf(u.pareceres)}</td>
+      <td class="n">${nf(u.perguntas)}</td>
+      <td class="n">${nf(u.explicacoes)}</td>
+      <td class="n">${mil(u.tokens_entrada)}</td>
+      <td class="n">${mil(u.tokens_imagem)}</td>
+      <td class="n">${mil(u.tokens_cache)}</td>
+      <td class="n">${mil(u.tokens_saida)}</td>
+      <td class="n">${brl(u.custo_ciclo_brl)}</td>
+      <td class="n">${brl(u.custo_total_brl)}</td>
+      <td class="n">${u.falhas ? '<span class="selo ruim">' + nf(u.falhas) + "</span>" : "0"}</td>
+    </tr>`;
+  }).join("");
+  document.querySelectorAll("[data-ajustar]").forEach((b) => b.addEventListener("click", abrirAjuste));
+
+  const ajustados = us.filter((u) => u.motivo_ajuste);
+  $("rodape").innerHTML =
+    "Entrada, imagem, cache e saida sao somas de todas as chamadas do usuario, desde sempre. " +
+    "O custo no ciclo e o do periodo de cobranca atual; o custo total e desde o cadastro.<br>" +
+    "A imagem e cobrada como entrada e aparece em coluna propria so para voce ver o peso dela.<br>" +
+    (ajustados.length
+      ? "<br><b>Cotas ajustadas a mao:</b><br>" + ajustados.map((u) =>
+          esc(u.nome || u.email) + ": " + nf(u.cota_mes) + " pareceres, por " + esc(u.ajustado_por) +
+          " em " + esc(u.ajustado_em) + ". Motivo: " + esc(u.motivo_ajuste)).join("<br>")
+      : "");
+}
+
+async function salvarModelo(ev) {
+  const tipo = ev.target.dataset.tipo, modelo = ev.target.value;
+  $("modelos-msg").innerHTML = "";
+  try {
+    const r = await api("/api/admin/modelos", { method: "POST", body: JSON.stringify({ [tipo]: modelo }) });
+    DADOS.modelos = r.modelos;
+    $("modelos-msg").innerHTML = '<div class="ok">Gravado. Vale para as proximas chamadas.</div>';
+    desenhar();
+  } catch (e) {
+    $("modelos-msg").innerHTML = '<div class="erro">' + esc(e.message) + "</div>";
+    carregar();
+  }
+}
+
+let alvo = null;
+function abrirAjuste(ev) {
+  alvo = DADOS.usuarios.find((u) => u.id === ev.target.dataset.ajustar);
+  if (!alvo) return;
+  $("dlg-quem").textContent = (alvo.nome || alvo.email) + " · usou " + nf(alvo.pareceres) + " no ciclo";
+  $("f-mes").value = alvo.cota_mes;
+  $("f-hora").value = alvo.cota_hora;
+  $("f-alerta").value = alvo.alerta_em;
+  $("f-motivo").value = "";
+  $("dlg-erro").textContent = "";
+  $("dlg").showModal();
+}
+
+$("dlg-cancelar").addEventListener("click", () => $("dlg").close());
+$("dlg-salvar").addEventListener("click", async () => {
+  $("dlg-erro").textContent = "";
+  try {
+    await api("/api/admin/cota", { method: "POST", body: JSON.stringify({
+      user_id: alvo.id,
+      pareceres_mes: +$("f-mes").value,
+      pareceres_hora: +$("f-hora").value,
+      alerta_em: +$("f-alerta").value,
+      motivo: $("f-motivo").value,
+    }) });
+    $("dlg").close();
+    carregar();
+  } catch (e) { $("dlg-erro").textContent = e.message; }
+});
+
+$("entrar").addEventListener("click", () => { SEGREDO = $("segredo").value.trim(); if (SEGREDO) carregar(); });
+$("segredo").addEventListener("keydown", (e) => { if (e.key === "Enter") $("entrar").click(); });
+$("recarregar").addEventListener("click", carregar);
+
+// O segredo fica so na aba aberta, nao no disco: fechou a aba, foi embora.
+try {
+  const g = sessionStorage.getItem("gt_admin");
+  if (g) { SEGREDO = g; $("segredo").value = g; carregar(); }
+} catch (e) { /* aba anonima, segue sem */ }
+</script>
+</body>
+</html>

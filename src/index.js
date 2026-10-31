@@ -20,6 +20,10 @@ import { costurar } from "./costura.js";
 import { agregar } from "./agregacao.js";
 import { leituraAtual } from "./indicadores.js";
 import { apurarLote, rastrear, faltamApurar } from "./rastreamento.js";
+import {
+  MODELOS, TIPOS, lerModelos, gravarModelo,
+  consumoPorUsuario, totaisConsumo, usuariosEmAlerta, ajustarCota,
+} from "./consumo.js";
 
 const json = (data, status = 200, extra = {}) =>
   new Response(JSON.stringify(data, null, 2), {
@@ -516,6 +520,89 @@ export default {
         if (check !== "ok") return erro("nao autorizado", 401);
         await liberar(env.DB);
         return json({ ok: true, mensagem: "recuo liberado" });
+      }
+
+
+      /* ================================================================
+         CONSUMO DE IA
+
+         Todas protegidas por segredo: expoem e-mail de usuario, custo e
+         limite, que nao sao coisas para ficarem abertas.
+         ================================================================ */
+
+      // Tabela da tela de consumo: uma linha por usuario.
+      if (rota === "/api/admin/consumo") {
+        const check = conferirAdmin(request, env);
+        if (check !== "ok") return erro("nao autorizado", check === "sem_segredo_no_servidor" ? 503 : 401);
+        try {
+          // A cotacao vem do Dolar que carregamos na base, nao de um numero
+          // fixo no codigo. Se ele ainda nao carregou, cai no padrao e a tela
+          // avisa de onde veio o numero.
+          const dolar = await env.DB
+            .prepare(`SELECT c, d FROM daily_bars WHERE ticker = 'USDBRL=X' ORDER BY d DESC LIMIT 1`)
+            .first();
+          const usdBrl = dolar && dolar.c > 0 ? dolar.c : undefined;
+
+          const [linhas, totais, alertas, modelos] = await Promise.all([
+            consumoPorUsuario(env.DB, { usdBrl, limite: url.searchParams.get("limite") }),
+            totaisConsumo(env.DB, { usdBrl }),
+            usuariosEmAlerta(env.DB),
+            lerModelos(env.DB),
+          ]);
+          return json({
+            usuarios: linhas,
+            totais,
+            alertas,
+            modelos,
+            catalogo: Object.entries(MODELOS).map(([id, m]) => ({
+              id, nome: m.nome, entrada: m.ent, saida: m.sai, leitura_cache: m.leituraCache,
+            })),
+            cotacao: {
+              usd_brl: totais.usd_brl,
+              origem: usdBrl ? "Dolar carregado na base" : "padrao do codigo",
+              data: dolar ? dolar.d : null,
+            },
+          });
+        } catch (e) {
+          return erro(String(e?.message || e).slice(0, 400), 500);
+        }
+      }
+
+      // Escolha de modelo por tipo de chamada.
+      if (rota === "/api/admin/modelos" && request.method === "POST") {
+        const check = conferirAdmin(request, env);
+        if (check !== "ok") return erro("nao autorizado", check === "sem_segredo_no_servidor" ? 503 : 401);
+        try {
+          const corpo = await request.json();
+          const feitos = [];
+          for (const [tipo, modelo] of Object.entries(corpo || {})) {
+            if (!TIPOS[tipo]) continue;          // ignora campo que nao e tipo de chamada
+            feitos.push(await gravarModelo(env.DB, tipo, modelo));
+          }
+          if (!feitos.length) return erro("nenhum tipo de chamada valido no pedido", 400);
+          return json({ ok: true, gravados: feitos, modelos: await lerModelos(env.DB) });
+        } catch (e) {
+          return erro(String(e?.message || e).slice(0, 400), 400);
+        }
+      }
+
+      // Ajuste manual da cota de um usuario.
+      if (rota === "/api/admin/cota" && request.method === "POST") {
+        const check = conferirAdmin(request, env);
+        if (check !== "ok") return erro("nao autorizado", check === "sem_segredo_no_servidor" ? 503 : 401);
+        try {
+          const b = await request.json();
+          const r = await ajustarCota(env.DB, b.user_id, {
+            pareceresMes:  b.pareceres_mes  != null ? parseInt(b.pareceres_mes, 10)  : null,
+            pareceresHora: b.pareceres_hora != null ? parseInt(b.pareceres_hora, 10) : null,
+            alertaEm:      b.alerta_em      != null ? parseInt(b.alerta_em, 10)      : null,
+            motivo: b.motivo,
+            por: b.por || "admin",
+          });
+          return json({ ok: true, cota: r });
+        } catch (e) {
+          return erro(String(e?.message || e).slice(0, 400), 400);
+        }
       }
 
       if (rota.startsWith("/api/")) return erro("rota nao encontrada", 404);

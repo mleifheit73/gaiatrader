@@ -9,7 +9,7 @@
     "deploy": "wrangler deploy",
     "db:migrate": "wrangler d1 migrations apply gaiatrader-db --remote",
     "db:migrate:local": "wrangler d1 migrations apply gaiatrader-db --local",
-    "test": "node testes/ajuste.test.mjs && node testes/provedor.test.mjs && node testes/brapi.test.mjs && node testes/agregacao.test.mjs && node testes/indicadores.test.mjs && node testes/rastreamento.test.mjs && node testes/metodo.test.mjs && node testes/esquema.test.mjs && node testes/acesso.test.mjs"
+    "test": "node testes/ajuste.test.mjs && node testes/provedor.test.mjs && node testes/brapi.test.mjs && node testes/agregacao.test.mjs && node testes/indicadores.test.mjs && node testes/rastreamento.test.mjs && node testes/metodo.test.mjs && node testes/esquema.test.mjs && node testes/acesso.test.mjs && node testes/consumo.test.mjs"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"
