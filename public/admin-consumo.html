@@ -12,6 +12,11 @@
   /* Cores, fontes e medidas vem de tokens.css. Nao redeclarar :root aqui:
      valor duplicado desalinha do resto do sistema. */
   *{box-sizing:border-box}
+  /* O atributo `hidden` do HTML funciona por uma regra do navegador
+     ([hidden]{display:none}), e QUALQUER regra do nosso CSS ganha dela. Um
+     `.trava{display:flex}` reabria o elemento que o script mandava esconder,
+     sem erro nenhum. Esta linha devolve ao `hidden` o poder de esconder. */
+  [hidden]{display:none !important}
   body{margin:0;background:var(--bg);color:var(--fg);font:var(--t-base)/1.55 var(--f-body)}
   .wrap{max-width:1240px;margin:0 auto;padding:26px 18px 72px}
 

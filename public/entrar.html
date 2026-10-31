@@ -12,6 +12,11 @@
 <style>
   /* Cores, fontes e medidas vem de tokens.css. */
   *{box-sizing:border-box}
+  /* O atributo `hidden` do HTML funciona por uma regra do navegador
+     ([hidden]{display:none}), e QUALQUER regra do nosso CSS ganha dela. Um
+     `.trava{display:flex}` reabria o elemento que o script mandava esconder,
+     sem erro nenhum. Esta linha devolve ao `hidden` o poder de esconder. */
+  [hidden]{display:none !important}
   html,body{height:100%}
   body{margin:0;background:var(--bg);color:var(--fg);font:var(--t-base)/1.6 var(--f-body);
        display:flex;align-items:center;justify-content:center;padding:24px}
